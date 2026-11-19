@@ -9,6 +9,8 @@
 #include "nanoce/nanoce.hpp"
 
 extern "C" const TSLanguage* tree_sitter_json();
+extern "C" const TSLanguage* tree_sitter_c();
+extern "C" const TSLanguage* tree_sitter_cpp();
 
 namespace {
 
@@ -161,3 +163,64 @@ Java_com_waizusora_nanoce_NativeBridge_nativeJsonDiagnostics(
     ts_parser_delete(parser);
     return result;
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_waizusora_nanoce_NativeBridge_nativeCodeDiagnostics(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jstring source,
+    jstring language
+) {
+    if (source == nullptr || language == nullptr) {
+        return env->NewStringUTF("PARSER_ERROR");
+    }
+
+    const char* language_name = env->GetStringUTFChars(language, nullptr);
+    if (language_name == nullptr) return nullptr;
+
+    const TSLanguage* grammar = nullptr;
+    if (std::string(language_name) == "c") {
+        grammar = tree_sitter_c();
+    } else if (std::string(language_name) == "cpp") {
+        grammar = tree_sitter_cpp();
+    } else if (std::string(language_name) == "json") {
+        grammar = tree_sitter_json();
+    }
+    env->ReleaseStringUTFChars(language, language_name);
+
+    if (grammar == nullptr) return env->NewStringUTF("UNSUPPORTED_LANGUAGE");
+
+    std::string utf8 = java_string_to_utf8(env, source);
+    if (env->ExceptionCheck()) return nullptr;
+    if (utf8.size() > UINT32_MAX) return env->NewStringUTF("INPUT_TOO_LARGE");
+
+    TSParser* parser = ts_parser_new();
+    if (parser == nullptr) return env->NewStringUTF("PARSER_ERROR");
+
+    TSTree* tree = ts_parser_set_language(parser, grammar)
+        ? ts_parser_parse_string(parser, nullptr, utf8.data(),
+              static_cast<uint32_t>(utf8.size()))
+        : nullptr;
+
+    jstring result = nullptr;
+    if (tree == nullptr) {
+        result = env->NewStringUTF("PARSER_ERROR");
+    } else {
+        const TSNode root = ts_tree_root_node(tree);
+        if (!ts_node_has_error(root)) {
+            result = env->NewStringUTF("OK");
+        } else {
+            const TSNode error = first_error_node(root);
+            const TSPoint point = ts_node_start_point(error);
+            const uint32_t column = utf16_column(utf8, point.row, point.column);
+            char message[64];
+            std::snprintf(message, sizeof(message), "ERROR:%u:%u",
+                          point.row + 1, column);
+            result = env->NewStringUTF(message);
+        }
+        ts_tree_delete(tree);
+    }
+    ts_parser_delete(parser);
+    return result;
+}
+
