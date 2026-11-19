@@ -52,7 +52,7 @@ Nanoce original code is licensed under the MIT License. Third-party components r
 
 ## Development status
 
-The Android foundation, SAF workspace adapter, and initial project explorer are under active development. The launcher loads the C++ core through JNI. The project explorer supports hierarchical folder expansion, file preview, and creation of root-level folders and text files. A full editable code buffer, editor tabs, terminal, and musl Git runtime remain subsequent stages.
+The Android foundation, SAF workspace adapter, hierarchical project explorer, and initial multi-document editor are under active development. The launcher loads the C++ core through JNI. The project explorer supports folder expansion and root-level folder/text-file creation. The editor supports multiple open text documents, dirty-state indicators, per-document save, and guarded tab closing/workspace switching. Syntax highlighting, robust large-file editing, terminal, and musl Git runtime remain subsequent stages.
 
 
 ## Android Storage Access Framework
