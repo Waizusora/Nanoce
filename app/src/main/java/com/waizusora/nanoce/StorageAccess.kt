@@ -40,7 +40,7 @@ internal class StorageAccess(context: Context) {
         preferences.getString(KEY_WORKSPACE_URI, null)?.let(Uri::parse)
 
     fun listChildren(directoryUri: Uri): List<StorageEntry> {
-        val documentId = DocumentsContract.getDocumentId(directoryUri)
+        val documentId = if (DocumentsContract.isTreeUri(directoryUri)) {\n            DocumentsContract.getTreeDocumentId(directoryUri)\n        } else {\n            DocumentsContract.getDocumentId(directoryUri)\n        }
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             directoryUri, documentId
         )
