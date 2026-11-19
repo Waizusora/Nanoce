@@ -29,9 +29,33 @@ private class CursorEditText(
     context: Context,
     private val onCursorChanged: () -> Unit
 ) : EditText(context) {
+    private val activeLinePaint = android.graphics.Paint().apply {
+        color = 0x182F81F7
+        style = android.graphics.Paint.Style.FILL
+    }
+
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)
+        invalidate()
         onCursorChanged()
+    }
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val textLayout = layout
+        if (textLayout != null && text.isNotEmpty()) {
+            val offset = selectionStart.coerceIn(0, text.length)
+            val line = textLayout.getLineForOffset(offset)
+            val top = textLayout.getLineTop(line).toFloat() + totalPaddingTop
+            val bottom = textLayout.getLineBottom(line).toFloat() + totalPaddingTop
+            canvas.drawRect(
+                scrollX.toFloat(),
+                top,
+                (scrollX + width).toFloat(),
+                bottom,
+                activeLinePaint
+            )
+        }
+        super.onDraw(canvas)
     }
 }
 
