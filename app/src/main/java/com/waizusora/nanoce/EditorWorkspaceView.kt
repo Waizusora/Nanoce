@@ -111,8 +111,17 @@ internal class EditorWorkspaceView(
         visibility = View.GONE
         setOnClickListener { validateActiveJson() }
     }
+    private val diagnosticView = TextView(context).apply {
+        textSize = 12f
+        setTextColor(0xFFFFB4AB.toInt())
+        setPadding(12, 4, 12, 6)
+        visibility = View.GONE
+        setOnClickListener { navigateToJsonError() }
+    }
     private val nativeBridge by lazy { NativeBridge() }
     private var jsonDiagnostic: String? = null
+    private var jsonErrorLine: Int? = null
+    private var jsonErrorColumn: Int? = null
     private val documents = linkedMapOf<Uri, EditorDocument>()
     private var activeUri: Uri? = null
     private var changingText = false
@@ -130,6 +139,10 @@ internal class EditorWorkspaceView(
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(diagnosticView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
         addView(ScrollView(context).apply {
             addView(LinearLayout(context).apply {
                 orientation = HORIZONTAL
@@ -424,16 +437,27 @@ internal class EditorWorkspaceView(
         runCatching {
             nativeBridge.nativeJsonDiagnostics(editor.text.toString())
         }.onSuccess { result ->
+            jsonErrorLine = null
+            jsonErrorColumn = null
             jsonDiagnostic = when {
                 result == "OK" -> "JSON valid"
                 result.startsWith("ERROR:") -> {
                     val location = result.removePrefix("ERROR:").split(":")
                     val line = location.getOrNull(0)?.toIntOrNull() ?: 1
                     val column = location.getOrNull(1)?.toIntOrNull() ?: 1
-                    "Syntax error at Ln $line, Col $column"
+                    jsonErrorLine = line
+                    jsonErrorColumn = column
+                    "Syntax error at Ln $line, Col $column — tap to navigate"
                 }
+                result == "INPUT_TOO_LARGE" -> "JSON file is too large to validate"
                 else -> "JSON parser unavailable"
             }
+            diagnosticView.text = jsonDiagnostic
+            diagnosticView.visibility = View.VISIBLE
+            diagnosticView.isClickable = jsonErrorLine != null
+            diagnosticView.setTextColor(
+                if (jsonErrorLine != null) 0xFFFFB4AB.toInt() else 0xFF9AD7A0.toInt()
+            )
             updateStatus()
             toast(jsonDiagnostic!!)
         }.onFailure { error ->
@@ -441,6 +465,21 @@ internal class EditorWorkspaceView(
             updateStatus()
             toast("JSON check failed: ${error.message ?: "native parser error"}")
         }
+    }
+
+
+    private fun navigateToJsonError() {
+        val line = jsonErrorLine ?: return
+        val column = jsonErrorColumn ?: return
+        val lines = editor.text.toString().split('\n')
+        if (line !in 1..lines.size) return
+        var offset = 0
+        for (index in 0 until line - 1) {
+            offset += lines[index].length + 1
+        }
+        offset += (column - 1).coerceIn(0, lines[line - 1].length)
+        editor.requestFocus()
+        editor.setSelection(offset.coerceIn(0, editor.text.length))
     }
 
     private fun updateLineNumbers() {
