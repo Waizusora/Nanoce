@@ -7,15 +7,28 @@ option(NANOCE_BUILD_TESTS "Build Nanoce native tests" ON)
 
 if(ANDROID)
     include(FetchContent)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Tree-sitter as a static library" FORCE)
-    set(TREE_SITTER_FEATURE_WASM OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
         tree_sitter
         GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
         GIT_TAG v0.25.10
         GIT_SHALLOW TRUE
     )
-    FetchContent_MakeAvailable(tree_sitter)
+    FetchContent_GetProperties(tree_sitter)
+    if(NOT tree_sitter_POPULATED)
+        FetchContent_Populate(tree_sitter)
+    endif()
+
+    add_library(tree-sitter STATIC
+        ${tree_sitter_SOURCE_DIR}/lib/src/lib.c
+    )
+    target_include_directories(tree-sitter PUBLIC
+        ${tree_sitter_SOURCE_DIR}/lib/include
+    )
+    set_target_properties(tree-sitter PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
 endif()
 
 add_library(nanoce_core STATIC
