@@ -104,6 +104,14 @@ internal class EditorWorkspaceView(
         setTextColor(0xFF9AA4B2.toInt())
         setPadding(12, 6, 12, 6)
     }
+    private val checkJson = Button(context).apply {
+        text = "Check JSON"
+        textSize = 11f
+        isAllCaps = false
+        setOnClickListener { validateActiveJson() }
+    }
+    private val nativeBridge by lazy { NativeBridge() }
+    private var jsonDiagnostic: String? = null
     private val documents = linkedMapOf<Uri, EditorDocument>()
     private var activeUri: Uri? = null
     private var changingText = false
@@ -112,7 +120,15 @@ internal class EditorWorkspaceView(
         orientation = VERTICAL
         setBackgroundColor(0xFF151922.toInt())
         addView(tabScroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(status, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(checkJson, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(ScrollView(context).apply {
             addView(LinearLayout(context).apply {
                 orientation = HORIZONTAL
@@ -245,6 +261,8 @@ internal class EditorWorkspaceView(
     private fun activate(uri: Uri) {
         val document = documents[uri] ?: return
         activeUri = uri
+        jsonDiagnostic = null
+        checkJson.visibility = if (document.name.substringAfterLast('.', "").lowercase() == "json") View.VISIBLE else View.GONE
         changingText = true
         editor.setText(document.text)
         editor.setSelection(editor.text.length)
@@ -395,6 +413,25 @@ internal class EditorWorkspaceView(
         SyntaxHighlighter.apply(editor.text, language)
     }
 
+    private fun validateActiveJson() {
+        val document = activeDocument() ?: return
+        if (document.name.substringAfterLast('.', "").lowercase() != "json") {
+            toast("JSON validation is available for .json files")
+            return
+        }
+        runCatching {
+            nativeBridge.nativeValidateJson(editor.text.toString())
+        }.onSuccess { valid ->
+            jsonDiagnostic = if (valid) "JSON valid" else "JSON syntax error"
+            updateStatus()
+            toast(jsonDiagnostic!!)
+        }.onFailure { error ->
+            jsonDiagnostic = "JSON check failed"
+            updateStatus()
+            toast("JSON check failed: ${error.message ?: "native parser error"}")
+        }
+    }
+
     private fun updateLineNumbers() {
         val lineCount = editor.text.count { it == '\n' } + 1
         lineNumbers.text = (1..lineCount).joinToString("\n")
@@ -414,7 +451,8 @@ internal class EditorWorkspaceView(
         val column = safeOffset - lastNewline
         val saveState = if (document.isDirty) "Modified — not saved" else "Saved"
         val language = EditorLanguage.fromFileName(document.name).label
-        status.text = "${language}  •  Ln ${line}, Col ${column}  •  ${saveState}"
+        val diagnostic = jsonDiagnostic?.let { "  •  $it" }.orEmpty()
+        status.text = "${language}  •  Ln ${line}, Col ${column}  •  ${saveState}${diagnostic}"
     }
 
     private fun toast(message: String) =
