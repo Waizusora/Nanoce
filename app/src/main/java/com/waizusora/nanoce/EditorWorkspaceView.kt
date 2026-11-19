@@ -184,6 +184,9 @@ internal class EditorWorkspaceView(
                 val document = activeDocument() ?: return
                 document.text = s?.toString().orEmpty()
                 jsonDiagnostic = null
+                jsonErrorLine = null
+                jsonErrorColumn = null
+                diagnosticView.visibility = View.GONE
                 updateLineNumbers()
                 updateSyntaxHighlighting()
                 updateStatus()
@@ -277,6 +280,9 @@ internal class EditorWorkspaceView(
         val document = documents[uri] ?: return
         activeUri = uri
         jsonDiagnostic = null
+        jsonErrorLine = null
+        jsonErrorColumn = null
+        diagnosticView.visibility = View.GONE
         checkJson.visibility = if (document.name.substringAfterLast('.', "").lowercase() == "json") View.VISIBLE else View.GONE
         changingText = true
         editor.setText(document.text)
@@ -462,6 +468,9 @@ internal class EditorWorkspaceView(
             toast(jsonDiagnostic!!)
         }.onFailure { error ->
             jsonDiagnostic = "JSON check failed"
+            diagnosticView.text = jsonDiagnostic
+            diagnosticView.visibility = View.VISIBLE
+            diagnosticView.isClickable = false
             updateStatus()
             toast("JSON check failed: ${error.message ?: "native parser error"}")
         }
