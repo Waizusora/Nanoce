@@ -139,6 +139,31 @@ internal class EditorWorkspaceView(
             .show()
     }
 
+    /** Close every tab before switching to a different project workspace. */
+    fun confirmCloseAllAndRun(action: () -> Unit) {
+        if (!hasUnsavedChanges()) {
+            closeAllDocuments()
+            action()
+            return
+        }
+        AlertDialog.Builder(context)
+            .setTitle("Unsaved changes")
+            .setMessage("Discard unsaved changes and close all editor tabs before switching projects?")
+            .setPositiveButton("Discard and continue") { _, _ ->
+                closeAllDocuments()
+                action()
+            }
+            .setNegativeButton("Keep editing", null)
+            .show()
+    }
+
+    private fun closeAllDocuments() {
+        documents.clear()
+        activeUri = null
+        renderTabs()
+        showEmptyState()
+    }
+
     private fun activate(uri: Uri) {
         val document = documents[uri] ?: return
         activeUri = uri
