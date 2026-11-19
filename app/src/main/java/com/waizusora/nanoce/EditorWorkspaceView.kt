@@ -25,6 +25,16 @@ private data class EditorDocument(
     val isDirty: Boolean get() = text != savedText
 }
 
+private class CursorEditText(
+    context: Context,
+    private val onCursorChanged: () -> Unit
+) : EditText(context) {
+    override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+        super.onSelectionChanged(selStart, selEnd)
+        onCursorChanged()
+    }
+}
+
 /** A small multi-document editor backed by Android SAF streams. */
 internal class EditorWorkspaceView(
     context: Context,
@@ -38,7 +48,7 @@ internal class EditorWorkspaceView(
         isHorizontalScrollBarEnabled = false
         addView(tabs)
     }
-    private val editor = EditText(context).apply {
+    private val editor = CursorEditText(context) { updateStatus() }.apply {
         textSize = 14f
         typeface = android.graphics.Typeface.MONOSPACE
         setTextColor(0xFFE6EAF0.toInt())
@@ -244,11 +254,18 @@ internal class EditorWorkspaceView(
 
     private fun updateStatus() {
         val document = activeDocument()
-        status.text = when {
-            document == null -> "No document open"
-            document.isDirty -> "${document.name}  •  Modified — not saved"
-            else -> "${document.name}  •  Saved"
+        if (document == null) {
+            status.text = "No document open"
+            return
         }
+        val selection = editor.selectionStart.coerceAtLeast(0)
+        val safeOffset = selection.coerceAtMost(editor.text.length)
+        val beforeCursor = editor.text.subSequence(0, safeOffset)
+        val line = beforeCursor.count { it == '\\n' } + 1
+        val lastNewline = beforeCursor.lastIndexOf("\\n")
+        val column = safeOffset - lastNewline
+        val saveState = if (document.isDirty) "Modified — not saved" else "Saved"
+        status.text = "${document.name}  •  Ln ${line}, Col ${column}  •  ${saveState}"
     }
 
     private fun toast(message: String) =
