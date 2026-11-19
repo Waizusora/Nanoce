@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -14,6 +15,7 @@ class MainActivity : Activity() {
     private val nativeBridge by lazy { NativeBridge() }
     private lateinit var storageAccess: StorageAccess
     private lateinit var workspaceStatus: TextView
+    private lateinit var explorer: ProjectExplorerView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,45 +23,72 @@ class MainActivity : Activity() {
 
         val title = TextView(this).apply {
             text = "Nanoce"
-            textSize = 28f
+            textSize = 26f
             setTextColor(0xFFE6EAF0.toInt())
         }
         val subtitle = TextView(this).apply {
             text = "Nano Code Editor"
-            textSize = 14f
+            textSize = 13f
             setTextColor(0xFF9AA4B2.toInt())
         }
         val version = TextView(this).apply {
             text = "Native core: ${nativeBridge.nativeVersion()}"
-            textSize = 12f
+            textSize = 11f
             setTextColor(0xFF7F8A99.toInt())
         }
         workspaceStatus = TextView(this).apply {
-            textSize = 13f
+            textSize = 12f
             setTextColor(0xFFB8C2D0.toInt())
             text = workspaceDescription(storageAccess.workspaceUri())
         }
-        val chooseWorkspace = Button(this).apply {
-            text = "Choose project folder"
-            setOnClickListener { openWorkspacePicker() }
+        explorer = ProjectExplorerView(this, storageAccess).apply {
+            showWorkspace(storageAccess.workspaceUri())
         }
 
-        val content = LinearLayout(this).apply {
+        val chooseWorkspace = Button(this).apply {
+            text = "Open project"
+            setOnClickListener { openWorkspacePicker() }
+        }
+        val createItem = Button(this).apply {
+            text = "New"
+            setOnClickListener { explorer.showCreateActions() }
+        }
+        val refresh = Button(this).apply {
+            text = "Refresh"
+            setOnClickListener { explorer.refresh() }
+        }
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(chooseWorkspace)
+            addView(createItem)
+            addView(refresh)
+        }
+
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(32, 32, 32, 32)
+            setPadding(20, 18, 20, 8)
             setBackgroundColor(0xFF151922.toInt())
             addView(title)
             addView(subtitle)
             addView(version)
-            addView(chooseWorkspace, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+            addView(actions, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 28 })
+            ).apply { topMargin = 12 })
             addView(workspaceStatus, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 16 })
+            ).apply { topMargin = 8 })
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF151922.toInt())
+            addView(header)
+            addView(explorer, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            ))
         }
         setContentView(content)
     }
@@ -84,14 +113,8 @@ class MainActivity : Activity() {
         val uri: Uri = data?.data ?: return
         try {
             storageAccess.persistWorkspace(uri, data.flags)
-            val entries = storageAccess.listChildren(uri)
-            workspaceStatus.text = buildString {
-                append("Workspace: ")
-                append(uri.lastPathSegment ?: uri.toString())
-                append("\n")
-                append(entries.size)
-                append(" items in project root")
-            }
+            workspaceStatus.text = workspaceDescription(uri)
+            explorer.showWorkspace(uri)
         } catch (error: Exception) {
             workspaceStatus.text = "Unable to access folder: ${error.message ?: "unknown error"}"
         }
