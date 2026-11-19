@@ -422,9 +422,18 @@ internal class EditorWorkspaceView(
             return
         }
         runCatching {
-            nativeBridge.nativeValidateJson(editor.text.toString())
-        }.onSuccess { valid ->
-            jsonDiagnostic = if (valid) "JSON valid" else "JSON syntax error"
+            nativeBridge.nativeJsonDiagnostics(editor.text.toString())
+        }.onSuccess { result ->
+            jsonDiagnostic = when {
+                result == "OK" -> "JSON valid"
+                result.startsWith("ERROR:") -> {
+                    val location = result.removePrefix("ERROR:").split(":")
+                    val line = location.getOrNull(0)?.toIntOrNull() ?: 1
+                    val column = location.getOrNull(1)?.toIntOrNull() ?: 1
+                    "Syntax error at Ln $line, Col $column"
+                }
+                else -> "JSON parser unavailable"
+            }
             updateStatus()
             toast(jsonDiagnostic!!)
         }.onFailure { error ->
