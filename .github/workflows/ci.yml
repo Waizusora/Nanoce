@@ -27,8 +27,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  android-ndk:
-    name: Android NDK (${{ matrix.abi }})
+  android-apk:
+    name: Android APK (${{ matrix.abi }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -38,15 +38,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure Android cross-build
-        run: |
-          cmake -S . -B "build-${{ matrix.abi }}" \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${{ matrix.abi }}" \
-            -DANDROID_PLATFORM=android-23 \
-            -DANDROID_STL=c++_static \
-            -DNANOCE_BUILD_TESTS=OFF \
-            -DCMAKE_BUILD_TYPE=Release
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Build Android native core
-        run: cmake --build "build-${{ matrix.abi }}" --parallel
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.2.12479018"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug -PnanoceAbi=${{ matrix.abi }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanoce-debug-${{ matrix.abi }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
