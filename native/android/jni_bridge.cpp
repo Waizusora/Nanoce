@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <tree_sitter/api.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <string>
@@ -65,6 +66,27 @@ void append_utf8(std::string& output, uint32_t codepoint) {
     }
 }
 
+uint32_t utf16_column(const std::string& source, uint32_t row, uint32_t byte_column) {
+    size_t line_start = 0;
+    for (uint32_t current = 0; current < row; ++current) {
+        const size_t newline = source.find('\n', line_start);
+        if (newline == std::string::npos) return 1;
+        line_start = newline + 1;
+    }
+    const size_t line_end = source.find('\n', line_start);
+    const size_t available = (line_end == std::string::npos ? source.size() : line_end) - line_start;
+    const size_t limit = line_start + std::min<size_t>(byte_column, available);
+    uint32_t units = 0;
+    for (size_t index = line_start; index < limit;) {
+        const unsigned char lead = static_cast<unsigned char>(source[index]);
+        const size_t width = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 :
+                             (lead & 0xF0) == 0xE0 ? 3 : 4;
+        if (index + width > limit) break;
+        units += width == 4 ? 2 : 1;
+        index += width;
+    }
+    return units + 1;
+}
 std::string java_string_to_utf8(JNIEnv* env, jstring source) {
     const jsize length = env->GetStringLength(source);
     const jchar* chars = env->GetStringChars(source, nullptr);
@@ -127,9 +149,10 @@ Java_com_waizusora_nanoce_NativeBridge_nativeJsonDiagnostics(
         } else {
             TSNode error = first_error_node(root);
             const TSPoint point = ts_node_start_point(error);
+            const uint32_t column = utf16_column(utf8, point.row, point.column);
             char message[64];
             std::snprintf(message, sizeof(message), "ERROR:%u:%u",
-                          point.row + 1, point.column + 1);
+                          point.row + 1, column);
             result = env->NewStringUTF(message);
         }
         ts_tree_delete(tree);
