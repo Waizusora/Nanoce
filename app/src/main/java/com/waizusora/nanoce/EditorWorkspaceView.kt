@@ -274,8 +274,8 @@ internal class EditorWorkspaceView(
     }
 
     private fun updateLineNumbers() {
-        val lineCount = editor.text.count { it == '\\n' } + 1
-        lineNumbers.text = (1..lineCount).joinToString("\\n")
+        val lineCount = editor.text.count { it == '\n' } + 1
+        lineNumbers.text = (1..lineCount).joinToString("\n")
     }
 
     private fun updateStatus() {
