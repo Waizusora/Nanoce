@@ -261,8 +261,8 @@ internal class EditorWorkspaceView(
         val selection = editor.selectionStart.coerceAtLeast(0)
         val safeOffset = selection.coerceAtMost(editor.text.length)
         val beforeCursor = editor.text.subSequence(0, safeOffset)
-        val line = beforeCursor.count { it == '\\n' } + 1
-        val lastNewline = beforeCursor.lastIndexOf("\\n")
+        val line = beforeCursor.count { it == '\n' } + 1
+        val lastNewline = beforeCursor.lastIndexOf("\n")
         val column = safeOffset - lastNewline
         val saveState = if (document.isDirty) "Modified — not saved" else "Saved"
         status.text = "${document.name}  •  Ln ${line}, Col ${column}  •  ${saveState}"
