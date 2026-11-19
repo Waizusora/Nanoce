@@ -73,7 +73,10 @@ internal class EditorWorkspaceView(
         isHorizontalScrollBarEnabled = false
         addView(tabs)
     }
-    private val editor = CursorEditText(context) { updateStatus() }.apply {
+    private val editor = CursorEditText(context) {
+        updateStatus()
+        updateBracketHighlights()
+    }.apply {
         textSize = 14f
         typeface = android.graphics.Typeface.MONOSPACE
         setTextColor(0xFFE6EAF0.toInt())
@@ -152,6 +155,7 @@ internal class EditorWorkspaceView(
                 document.text = s?.toString().orEmpty()
                 updateLineNumbers()
                 updateStatus()
+                updateBracketHighlights()
                 renderTabs()
             }
             override fun afterTextChanged(s: Editable?) = Unit
@@ -315,6 +319,71 @@ internal class EditorWorkspaceView(
         updateLineNumbers()
         editor.hint = "Open a text file from the project explorer"
         status.text = "No document open"
+    }
+
+    private val bracketHighlightSpans = mutableListOf<android.text.style.BackgroundColorSpan>()
+
+    /** Highlights the bracket adjacent to the caret and its matching partner. */
+    private fun updateBracketHighlights() {
+        val editable = editor.text
+        bracketHighlightSpans.forEach { editable.removeSpan(it) }
+        bracketHighlightSpans.clear()
+        if (editable.isEmpty()) return
+
+        val caret = editor.selectionStart.coerceIn(0, editable.length)
+        val candidate = when {
+            caret < editable.length && editable[caret] in "(){}[]" -> caret
+            caret > 0 && editable[caret - 1] in "(){}[]" -> caret - 1
+            else -> return
+        }
+        val opening = "({["
+        val closing = ")}]"
+        val character = editable[candidate]
+        val partner = when {
+            character in opening -> {
+                val expected = closing[opening.indexOf(character)]
+                var depth = 0
+                var match = -1
+                for (index in candidate until editable.length) {
+                    when (editable[index]) {
+                        character -> depth++
+                        expected -> {
+                            depth--
+                            if (depth == 0) {
+                                match = index
+                                break
+                            }
+                        }
+                    }
+                }
+                match
+            }
+            else -> {
+                val expected = opening[closing.indexOf(character)]
+                var depth = 0
+                var match = -1
+                for (index in candidate downTo 0) {
+                    when (editable[index]) {
+                        character -> depth++
+                        expected -> {
+                            depth--
+                            if (depth == 0) {
+                                match = index
+                                break
+                            }
+                        }
+                    }
+                }
+                match
+            }
+        }
+        if (partner < 0) return
+
+        listOf(candidate, partner).forEach { index ->
+            val span = android.text.style.BackgroundColorSpan(0xFF665C32.toInt())
+            editable.setSpan(span, index, index + 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            bracketHighlightSpans.add(span)
+        }
     }
 
     private fun updateLineNumbers() {
