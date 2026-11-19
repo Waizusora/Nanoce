@@ -158,26 +158,58 @@ internal class ProjectExplorerView(
 
             val looksTextual = mimeType.startsWith("text/") ||
                 name.substringAfterLast('.', "").lowercase() in TEXT_EXTENSIONS
-            val body = if (looksTextual) {
-                String(bytes, Charsets.UTF_8) +
-                    if (bytes.size >= MAX_PREVIEW_BYTES) "\n\n… preview truncated …" else ""
-            } else {
-                "Binary or unsupported document.\nRead ${bytes.size} bytes."
+            if (!looksTextual) {
+                AlertDialog.Builder(context)
+                    .setTitle(name)
+                    .setMessage("Binary or unsupported document. Read ${bytes.size} bytes.")
+                    .setPositiveButton("Close", null)
+                    .show()
+                return
             }
-            val preview = TextView(context).apply {
-                text = body
+
+            val originalText = String(bytes, Charsets.UTF_8)
+            val editor = EditText(context).apply {
+                setText(originalText)
                 textSize = 13f
                 typeface = android.graphics.Typeface.MONOSPACE
                 setTextColor(0xFFE6EAF0.toInt())
+                setHintTextColor(0xFF7F8A99.toInt())
                 setPadding(20, 16, 20, 16)
-                setTextIsSelectable(true)
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                setHorizontallyScrolling(true)
+                minLines = 12
             }
-            val scroll = ScrollView(context).apply { addView(preview) }
-            AlertDialog.Builder(context)
+            val scroll = ScrollView(context).apply {
+                addView(editor, ScrollView.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT
+                ))
+            }
+            val dialog = AlertDialog.Builder(context)
                 .setTitle(name)
                 .setView(scroll)
-                .setPositiveButton("Close", null)
-                .show()
+                .setPositiveButton("Save", null)
+                .setNegativeButton("Cancel", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val updated = editor.text.toString()
+                    runCatching {
+                        storage.openOutput(uri)?.use { output ->
+                            output.write(updated.toByteArray(Charsets.UTF_8))
+                            output.flush()
+                        } ?: throw IllegalStateException("Provider returned no output stream")
+                    }.onSuccess {
+                        toast("Saved")
+                        dialog.dismiss()
+                    }.onFailure {
+                        toast("Save failed: ${it.message ?: "write error"}")
+                    }
+                }
+            }
+            dialog.show()
         } catch (error: Exception) {
             toast("Unable to open file: ${error.message ?: "read error"}")
         }
