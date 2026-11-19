@@ -108,6 +108,7 @@ internal class EditorWorkspaceView(
         text = "Check JSON"
         textSize = 11f
         isAllCaps = false
+        visibility = View.GONE
         setOnClickListener { validateActiveJson() }
     }
     private val nativeBridge by lazy { NativeBridge() }
@@ -169,6 +170,7 @@ internal class EditorWorkspaceView(
                 if (changingText) return
                 val document = activeDocument() ?: return
                 document.text = s?.toString().orEmpty()
+                jsonDiagnostic = null
                 updateLineNumbers()
                 updateSyntaxHighlighting()
                 updateStatus()
