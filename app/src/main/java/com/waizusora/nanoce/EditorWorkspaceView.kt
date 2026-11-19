@@ -154,6 +154,7 @@ internal class EditorWorkspaceView(
                 val document = activeDocument() ?: return
                 document.text = s?.toString().orEmpty()
                 updateLineNumbers()
+                updateSyntaxHighlighting()
                 updateStatus()
                 updateBracketHighlights()
                 renderTabs()
@@ -248,6 +249,7 @@ internal class EditorWorkspaceView(
         editor.setText(document.text)
         editor.setSelection(editor.text.length)
         updateLineNumbers()
+        updateSyntaxHighlighting()
         changingText = false
         editor.visibility = View.VISIBLE
         updateStatus()
@@ -317,6 +319,7 @@ internal class EditorWorkspaceView(
         editor.setText("")
         changingText = false
         updateLineNumbers()
+        updateSyntaxHighlighting()
         editor.hint = "Open a text file from the project explorer"
         status.text = "No document open"
     }
@@ -386,6 +389,12 @@ internal class EditorWorkspaceView(
         }
     }
 
+    private fun updateSyntaxHighlighting() {
+        val language = activeDocument()?.let { EditorLanguage.fromFileName(it.name) }
+            ?: EditorLanguage.PLAIN
+        SyntaxHighlighter.apply(editor.text, language)
+    }
+
     private fun updateLineNumbers() {
         val lineCount = editor.text.count { it == '\n' } + 1
         lineNumbers.text = (1..lineCount).joinToString("\n")
@@ -404,7 +413,8 @@ internal class EditorWorkspaceView(
         val lastNewline = beforeCursor.lastIndexOf("\n")
         val column = safeOffset - lastNewline
         val saveState = if (document.isDirty) "Modified — not saved" else "Saved"
-        status.text = "${document.name}  •  Ln ${line}, Col ${column}  •  ${saveState}"
+        val language = EditorLanguage.fromFileName(document.name).label
+        status.text = "${language}  •  Ln ${line}, Col ${column}  •  ${saveState}"
     }
 
     private fun toast(message: String) =
