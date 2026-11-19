@@ -3,7 +3,7 @@ package com.waizusora.nanoce
 internal class NativeBridge {
     external fun nativeVersion(): String
     external fun nativeTreeSitterLanguageAbi(): Int
-    external fun nativeValidateJson(source: String): Boolean
+    external fun nativeJsonDiagnostics(source: String): String
 
     companion object {
         init {
