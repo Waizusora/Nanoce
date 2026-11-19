@@ -149,14 +149,24 @@ internal class ProjectExplorerView(
                 val output = java.io.ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
                 var total = 0
-                while (total < MAX_PREVIEW_BYTES) {
-                    val count = input.read(buffer, 0, minOf(buffer.size, MAX_PREVIEW_BYTES - total))
+                while (total <= MAX_PREVIEW_BYTES) {
+                    val remaining = MAX_PREVIEW_BYTES + 1 - total
+                    val count = input.read(buffer, 0, minOf(buffer.size, remaining))
                     if (count <= 0) break
                     output.write(buffer, 0, count)
                     total += count
                 }
                 output.toByteArray()
             } ?: throw IllegalStateException("Provider returned no input stream")
+
+            if (bytes.size > MAX_PREVIEW_BYTES) {
+                AlertDialog.Builder(context)
+                    .setTitle("File too large to edit")
+                    .setMessage("This editor currently supports files up to 256 KiB. The original file was not changed.")
+                    .setPositiveButton("Close", null)
+                    .show()
+                return
+            }
 
             val looksTextual = mimeType.startsWith("text/") ||
                 name.substringAfterLast('.', "").lowercase() in TEXT_EXTENSIONS
