@@ -2,6 +2,8 @@
 #include <tree_sitter/api.h>
 
 #include <cstdio>
+#include <cstdint>
+#include <string>
 
 #include "nanoce/nanoce.hpp"
 
