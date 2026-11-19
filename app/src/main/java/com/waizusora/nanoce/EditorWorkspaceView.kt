@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.net.Uri
 import android.text.Editable
+import android.text.InputFilter
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
@@ -124,6 +125,25 @@ internal class EditorWorkspaceView(
             isFillViewport = true
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        editor.filters = editor.filters + InputFilter { source, start, end, dest, dstart, dend ->
+            val inserted = source.subSequence(start, end).toString()
+            if (inserted != "\n" && inserted != "\r\n") {
+                null
+            } else {
+                var lineStart = dstart
+                while (lineStart > 0 && dest[lineStart - 1] != '\n') {
+                    lineStart--
+                }
+                val currentLine = dest.subSequence(lineStart, dstart).toString()
+                val indentation = currentLine.takeWhile { it == ' ' || it == '\t' }
+                val extraIndent = if (currentLine.trimEnd().endsWith("{")) {
+                    if (indentation.contains('\t')) "\t" else "    "
+                } else {
+                    ""
+                }
+                inserted + indentation + extraIndent
+            }
+        }
         editor.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
