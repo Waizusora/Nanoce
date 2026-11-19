@@ -1,0 +1,9 @@
+#include "nanoce/nanoce.hpp"
+
+namespace nanoce {
+
+std::string_view version() noexcept {
+    return "0.1.0-dev";
+}
+
+} // namespace nanoce
