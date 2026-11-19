@@ -24,6 +24,7 @@ internal class ProjectExplorerView(
     }
     private val expanded = mutableSetOf<Uri>()
     private var rootUri: Uri? = null
+    var onOpenTextFile: ((Uri, String, String) -> Unit)? = null
 
     init {
         addView(rows)
@@ -166,50 +167,13 @@ internal class ProjectExplorerView(
                     .show()
                 return
             }
-
-            val originalText = String(bytes, Charsets.UTF_8)
-            val editor = EditText(context).apply {
-                setText(originalText)
-                textSize = 13f
-                typeface = android.graphics.Typeface.MONOSPACE
-                setTextColor(0xFFE6EAF0.toInt())
-                setHintTextColor(0xFF7F8A99.toInt())
-                setPadding(20, 16, 20, 16)
-                gravity = android.view.Gravity.TOP or android.view.Gravity.START
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                setHorizontallyScrolling(true)
-                minLines = 12
-            }
-            val scroll = ScrollView(context).apply {
-                addView(editor, ScrollView.LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT
-                ))
-            }
-            val dialog = AlertDialog.Builder(context)
-                .setTitle(name)
-                .setView(scroll)
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
-                .create()
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val updated = editor.text.toString()
-                    runCatching {
-                        storage.openOutput(uri)?.use { output ->
-                            output.write(updated.toByteArray(Charsets.UTF_8))
-                            output.flush()
-                        } ?: throw IllegalStateException("Provider returned no output stream")
-                    }.onSuccess {
-                        toast("Saved")
-                        dialog.dismiss()
-                    }.onFailure {
-                        toast("Save failed: ${it.message ?: "write error"}")
-                    }
-                }
-            }
-            dialog.show()
+            val content = String(bytes, Charsets.UTF_8)
+            onOpenTextFile?.invoke(uri, name, content)
+                ?: AlertDialog.Builder(context)
+                    .setTitle(name)
+                    .setMessage(content)
+                    .setPositiveButton("Close", null)
+                    .show()
         } catch (error: Exception) {
             toast("Unable to open file: ${error.message ?: "read error"}")
         }
