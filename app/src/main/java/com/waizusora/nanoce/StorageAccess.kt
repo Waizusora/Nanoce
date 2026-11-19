@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 
 internal data class StorageEntry(
     val name: String,
@@ -32,6 +31,11 @@ internal class StorageAccess(context: Context) {
             Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
+        require(grants != 0) { "The selected folder did not grant read or write access" }
+        val previous = workspaceUri()
+        if (previous != null && previous != uri) {
+            runCatching { resolver.releasePersistableUriPermission(previous, grants) }
+        }
         resolver.takePersistableUriPermission(uri, grants)
         preferences.edit().putString(KEY_WORKSPACE_URI, uri.toString()).apply()
     }
@@ -40,10 +44,10 @@ internal class StorageAccess(context: Context) {
         preferences.getString(KEY_WORKSPACE_URI, null)?.let(Uri::parse)
 
     fun listChildren(directoryUri: Uri): List<StorageEntry> {
-        val documentId = if (DocumentsContract.isTreeUri(directoryUri)) {
-            DocumentsContract.getTreeDocumentId(directoryUri)
-        } else {
+        val documentId = if (DocumentsContract.isDocumentUri(appContext, directoryUri)) {
             DocumentsContract.getDocumentId(directoryUri)
+        } else {
+            DocumentsContract.getTreeDocumentId(directoryUri)
         }
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             directoryUri, documentId
@@ -92,22 +96,29 @@ internal class StorageAccess(context: Context) {
     fun createDirectory(parentUri: Uri, name: String): Uri? {
         requireValidName(name)
         return DocumentsContract.createDocument(
-            resolver, parentUri, DocumentsContract.Document.MIME_TYPE_DIR, name
+            resolver, asDocumentUri(parentUri),
+            DocumentsContract.Document.MIME_TYPE_DIR, name
         )
     }
 
     fun createFile(parentUri: Uri, name: String, mimeType: String): Uri? {
         requireValidName(name)
         require(mimeType.isNotBlank())
-        return DocumentsContract.createDocument(resolver, parentUri, mimeType, name)
+        return DocumentsContract.createDocument(resolver, asDocumentUri(parentUri), mimeType, name)
     }
 
-    fun openInput(uri: Uri) = resolver.openInputStream(uri)
+    fun openInput(uri: Uri) = resolver.openInputStream(asDocumentUri(uri))
 
-    fun openOutput(uri: Uri) = resolver.openOutputStream(uri, "wt")
+    fun openOutput(uri: Uri) = resolver.openOutputStream(asDocumentUri(uri), "wt")
 
     fun delete(uri: Uri): Boolean =
-        DocumentsContract.deleteDocument(resolver, uri)
+        DocumentsContract.deleteDocument(resolver, asDocumentUri(uri))
+
+    private fun asDocumentUri(uri: Uri): Uri =
+        if (DocumentsContract.isDocumentUri(appContext, uri)) uri
+        else DocumentsContract.buildDocumentUriUsingTree(
+            uri, DocumentsContract.getTreeDocumentId(uri)
+        )
 
     private fun requireValidName(name: String) {
         require(name.isNotBlank() && name != "." && name != "..")
