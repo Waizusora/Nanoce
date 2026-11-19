@@ -133,7 +133,7 @@ class MainActivity : Activity() {
     }
 
     private fun openWorkspacePicker() {
-        editorWorkspace.confirmDiscardAndRun {
+        editorWorkspace.confirmCloseAllAndRun {
             launchWorkspacePicker()
         }
     }
