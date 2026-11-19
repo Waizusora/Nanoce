@@ -43,6 +43,51 @@ Java_com_waizusora_nanoce_NativeBridge_nativeTreeSitterLanguageAbi(
     return TREE_SITTER_LANGUAGE_VERSION;
 }
 
+namespace {
+
+void append_utf8(std::string& output, uint32_t codepoint) {
+    if (codepoint <= 0x7F) {
+        output.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7FF) {
+        output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else if (codepoint <= 0xFFFF) {
+        output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else {
+        output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+}
+
+std::string java_string_to_utf8(JNIEnv* env, jstring source) {
+    const jsize length = env->GetStringLength(source);
+    const jchar* chars = env->GetStringChars(source, nullptr);
+    if (chars == nullptr) return {};
+
+    std::string output;
+    output.reserve(static_cast<size_t>(length) * 3);
+    for (jsize index = 0; index < length; ++index) {
+        uint32_t codepoint = chars[index];
+        if (codepoint >= 0xD800 && codepoint <= 0xDBFF &&
+            index + 1 < length && chars[index + 1] >= 0xDC00 &&
+            chars[index + 1] <= 0xDFFF) {
+            codepoint = 0x10000 + ((codepoint - 0xD800) << 10) +
+                        (static_cast<uint32_t>(chars[++index]) - 0xDC00);
+        } else if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
+            codepoint = 0xFFFD;
+        }
+        append_utf8(output, codepoint);
+    }
+    env->ReleaseStringChars(source, chars);
+    return output;
+}
+
+}  // namespace
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_waizusora_nanoce_NativeBridge_nativeJsonDiagnostics(
     JNIEnv* env,
@@ -53,21 +98,21 @@ Java_com_waizusora_nanoce_NativeBridge_nativeJsonDiagnostics(
         return env->NewStringUTF("ERROR:1:1");
     }
 
-    const char* utf8 = env->GetStringUTFChars(source, nullptr);
-    if (utf8 == nullptr) {
-        return nullptr;
+    std::string utf8 = java_string_to_utf8(env, source);
+    if (env->ExceptionCheck()) return nullptr;
+    if (utf8.size() > UINT32_MAX) {
+        return env->NewStringUTF("INPUT_TOO_LARGE");
     }
 
     TSParser* parser = ts_parser_new();
     if (parser == nullptr) {
-        env->ReleaseStringUTFChars(source, utf8);
         return env->NewStringUTF("PARSER_ERROR");
     }
 
     const bool language_set = ts_parser_set_language(parser, tree_sitter_json());
     TSTree* tree = language_set
-        ? ts_parser_parse_string(parser, nullptr, utf8,
-              static_cast<uint32_t>(env->GetStringUTFLength(source)))
+        ? ts_parser_parse_string(parser, nullptr, utf8.data(),
+              static_cast<uint32_t>(utf8.size()))
         : nullptr;
 
     jstring result = nullptr;
@@ -89,6 +134,5 @@ Java_com_waizusora_nanoce_NativeBridge_nativeJsonDiagnostics(
     }
 
     ts_parser_delete(parser);
-    env->ReleaseStringUTFChars(source, utf8);
     return result;
 }
