@@ -6,7 +6,7 @@ Nanoce is a native Android code editor focused on project-oriented source editin
 
 - Android application targeting **ARM64 (arm64-v8a)** and **x86-64 (x86_64)**.
 - C++ is the primary implementation language.
-- Android platform integration through the Android NDK and a minimal JNI bridge.
+- Android platform integration through the Android NDK and a minimal Kotlin/JNI bridge.
 - Project explorer with a hierarchical directory tree.
 - Code editor with syntax highlighting and multi-document tabs.
 - Integrated CLI terminal using a PTY and native process execution.
@@ -16,7 +16,9 @@ Nanoce is a native Android code editor focused on project-oriented source editin
 
 ## Architecture
 
-The application core is implemented in C++. Android-specific lifecycle, permission, and SAF integration may use a thin Kotlin/Java bridge. This bridge does not replace the C++ application core.
+The application core is implemented in C++. A thin Kotlin layer handles Android Activity lifecycle and platform integration; JNI connects it to the C++ core.
+
+The Android application is built with Gradle, Android Gradle Plugin, Android NDK, and CMake. CI builds separate debug APKs for both supported Android ABIs.
 
 Git runtime targets:
 
@@ -27,10 +29,27 @@ Git runtime targets:
 
 A successful cross-build is not considered proof of Android compatibility. Runtime validation must cover Android kernel behavior, SELinux, seccomp, executable placement, filesystem semantics, DNS, TLS, and Git transport/helper behavior.
 
+## Development
+
+Build both ABIs:
+
+```sh
+gradle :app:assembleDebug
+```
+
+Build one ABI:
+
+```sh
+gradle :app:assembleDebug -PnanoceAbi=arm64-v8a
+gradle :app:assembleDebug -PnanoceAbi=x86_64
+```
+
+The initial application foundation requires JDK 17, Android SDK Platform 35, Android NDK, and CMake 3.22.1.
+
 ## License
 
 Nanoce original code is licensed under the MIT License. Third-party components retain their respective licenses and notices.
 
 ## Development status
 
-The repository is at its initial foundation stage. Features are added incrementally with CI validation for both Android ABIs.
+The Android application foundation is under active development. The current launcher validates loading the C++ core through JNI. File explorer, editor, terminal, and musl Git runtime are implemented in subsequent stages.
