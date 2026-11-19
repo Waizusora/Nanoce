@@ -61,6 +61,16 @@ internal class EditorWorkspaceView(
         setHorizontallyScrolling(true)
         setBackgroundColor(0xFF151922.toInt())
     }
+    private val lineNumbers = TextView(context).apply {
+        textSize = 14f
+        typeface = android.graphics.Typeface.MONOSPACE
+        gravity = Gravity.TOP or Gravity.END
+        setTextColor(0xFF657184.toInt())
+        setPadding(8, 14, 10, 24)
+        setBackgroundColor(0xFF11161E.toInt())
+        isSingleLine = false
+        text = "1"
+    }
     private val status = TextView(context).apply {
         textSize = 11f
         setTextColor(0xFF9AA4B2.toInt())
@@ -76,7 +86,15 @@ internal class EditorWorkspaceView(
         addView(tabScroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(ScrollView(context).apply {
-            addView(editor, ViewGroup.LayoutParams(
+            addView(LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                addView(lineNumbers, LinearLayout.LayoutParams(
+                    48, ViewGroup.LayoutParams.WRAP_CONTENT
+                ))
+                addView(editor, LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                ))
+            }, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ))
             isFillViewport = true
@@ -88,6 +106,7 @@ internal class EditorWorkspaceView(
                 if (changingText) return
                 val document = activeDocument() ?: return
                 document.text = s?.toString().orEmpty()
+                updateLineNumbers()
                 updateStatus()
                 renderTabs()
             }
@@ -180,6 +199,7 @@ internal class EditorWorkspaceView(
         changingText = true
         editor.setText(document.text)
         editor.setSelection(editor.text.length)
+        updateLineNumbers()
         changingText = false
         editor.visibility = View.VISIBLE
         updateStatus()
@@ -248,8 +268,14 @@ internal class EditorWorkspaceView(
         changingText = true
         editor.setText("")
         changingText = false
+        updateLineNumbers()
         editor.hint = "Open a text file from the project explorer"
         status.text = "No document open"
+    }
+
+    private fun updateLineNumbers() {
+        val lineCount = editor.text.count { it == '\\n' } + 1
+        lineNumbers.text = (1..lineCount).joinToString("\\n")
     }
 
     private fun updateStatus() {
