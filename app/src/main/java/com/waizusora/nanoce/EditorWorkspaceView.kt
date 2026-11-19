@@ -105,11 +105,11 @@ internal class EditorWorkspaceView(
         setPadding(12, 6, 12, 6)
     }
     private val checkJson = Button(context).apply {
-        text = "Check JSON"
+        text = "Validate"
         textSize = 11f
         isAllCaps = false
         visibility = View.GONE
-        setOnClickListener { validateActiveJson() }
+        setOnClickListener { validateActiveSource() }
     }
     private val diagnosticView = TextView(context).apply {
         textSize = 12f
@@ -283,7 +283,7 @@ internal class EditorWorkspaceView(
         jsonErrorLine = null
         jsonErrorColumn = null
         diagnosticView.visibility = View.GONE
-        checkJson.visibility = if (document.name.substringAfterLast('.', "").lowercase() == "json") View.VISIBLE else View.GONE
+        checkJson.visibility = if (supportsNativeValidation(document.name)) View.VISIBLE else View.GONE
         changingText = true
         editor.setText(document.text)
         editor.setSelection(editor.text.length)
@@ -434,48 +434,53 @@ internal class EditorWorkspaceView(
         SyntaxHighlighter.apply(editor.text, language)
     }
 
-    private fun validateActiveJson() {
-        val document = activeDocument() ?: return
-        if (document.name.substringAfterLast('.', "").lowercase() != "json") {
-            toast("JSON validation is available for .json files")
-            return
-        }
-        runCatching {
-            nativeBridge.nativeJsonDiagnostics(editor.text.toString())
-        }.onSuccess { result ->
-            jsonErrorLine = null
-            jsonErrorColumn = null
-            jsonDiagnostic = when {
-                result == "OK" -> "JSON valid"
-                result.startsWith("ERROR:") -> {
-                    val location = result.removePrefix("ERROR:").split(":")
-                    val line = location.getOrNull(0)?.toIntOrNull() ?: 1
-                    val column = location.getOrNull(1)?.toIntOrNull() ?: 1
-                    jsonErrorLine = line
-                    jsonErrorColumn = column
-                    "Syntax error at Ln $line, Col $column — tap to navigate"
-                }
-                result == "INPUT_TOO_LARGE" -> "JSON file is too large to validate"
-                else -> "JSON parser unavailable"
-            }
-            diagnosticView.text = jsonDiagnostic
-            diagnosticView.visibility = View.VISIBLE
-            diagnosticView.isClickable = jsonErrorLine != null
-            diagnosticView.setTextColor(
-                if (jsonErrorLine != null) 0xFFFFB4AB.toInt() else 0xFF9AD7A0.toInt()
-            )
-            updateStatus()
-            toast(jsonDiagnostic!!)
-        }.onFailure { error ->
-            jsonDiagnostic = "JSON check failed"
-            diagnosticView.text = jsonDiagnostic
-            diagnosticView.visibility = View.VISIBLE
-            diagnosticView.isClickable = false
-            updateStatus()
-            toast("JSON check failed: ${error.message ?: "native parser error"}")
-        }
-    }
+    private fun supportsNativeValidation(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase() in
+            setOf("json", "c", "h", "cc", "hh", "cpp", "hpp", "cxx", "hxx")
 
+    private fun validateActiveSource() {
+        val document = activeDocument() ?: return
+        val extension = document.name.substringAfterLast('.', "").lowercase()
+        val language = when (extension) {
+            "json" -> "json"
+            "c", "h" -> "c"
+            "cc", "hh", "cpp", "hpp", "cxx", "hxx" -> "cpp"
+            else -> { toast("No native parser for this file type"); return }
+        }
+        val languageLabel = when (language) { "json" -> "JSON"; "c" -> "C"; else -> "C++" }
+        runCatching { nativeBridge.nativeCodeDiagnostics(editor.text.toString(), language) }
+            .onSuccess { result ->
+                jsonErrorLine = null
+                jsonErrorColumn = null
+                jsonDiagnostic = when {
+                    result == "OK" -> "$languageLabel syntax valid"
+                    result.startsWith("ERROR:") -> {
+                        val location = result.removePrefix("ERROR:").split(":")
+                        val line = location.getOrNull(0)?.toIntOrNull() ?: 1
+                        val column = location.getOrNull(1)?.toIntOrNull() ?: 1
+                        jsonErrorLine = line
+                        jsonErrorColumn = column
+                        "$languageLabel syntax error at Ln $line, Col $column — tap to navigate"
+                    }
+                    result == "INPUT_TOO_LARGE" -> "$languageLabel source is too large to validate"
+                    result == "UNSUPPORTED_LANGUAGE" -> "No parser available for $languageLabel"
+                    else -> "$languageLabel parser unavailable"
+                }
+                diagnosticView.text = jsonDiagnostic
+                diagnosticView.visibility = View.VISIBLE
+                diagnosticView.isClickable = jsonErrorLine != null
+                diagnosticView.setTextColor(if (jsonErrorLine != null) 0xFFFFB4AB.toInt() else 0xFF9AD7A0.toInt())
+                updateStatus()
+                toast(jsonDiagnostic!!)
+            }.onFailure { error ->
+                jsonDiagnostic = "$languageLabel validation failed"
+                diagnosticView.text = jsonDiagnostic
+                diagnosticView.visibility = View.VISIBLE
+                diagnosticView.isClickable = false
+                updateStatus()
+                toast("$languageLabel validation failed: ${error.message ?: "native parser error"}")
+            }
+    }
 
     private fun navigateToJsonError() {
         val line = jsonErrorLine ?: return
