@@ -53,3 +53,10 @@ Nanoce original code is licensed under the MIT License. Third-party components r
 ## Development status
 
 The Android application foundation is under active development. The current launcher validates loading the C++ core through JNI. File explorer, editor, terminal, and musl Git runtime are implemented in subsequent stages.
+
+
+## Android Storage Access Framework
+
+The Android layer includes a SAF workspace adapter. Users can choose a project directory with the system document-tree picker; Nanoce persists the granted read/write URI permission and can enumerate children, create files/directories, open streams, and delete documents through `DocumentsContract`.
+
+SAF document URIs remain opaque content URIs. They are not converted to ordinary paths and cannot automatically be passed to `std::filesystem` or a CLI process. A later workspace/terminal integration must explicitly handle provider-backed documents and, where a real filesystem path is required, use an app-owned or otherwise accessible filesystem workspace. Android's picker and provider determine which locations are available.
