@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -16,6 +17,8 @@ class MainActivity : Activity() {
     private lateinit var storageAccess: StorageAccess
     private lateinit var workspaceStatus: TextView
     private lateinit var explorer: ProjectExplorerView
+    private lateinit var editorWorkspace: EditorWorkspaceView
+    private lateinit var workspaceBody: FrameLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +47,11 @@ class MainActivity : Activity() {
         explorer = ProjectExplorerView(this, storageAccess).apply {
             showWorkspace(storageAccess.workspaceUri())
         }
+        editorWorkspace = EditorWorkspaceView(this, storageAccess)
+        explorer.onOpenTextFile = { uri, name, text ->
+            editorWorkspace.openDocument(uri, name, text)
+            showEditor()
+        }
 
         val chooseWorkspace = Button(this).apply {
             text = "Open project"
@@ -57,12 +65,22 @@ class MainActivity : Activity() {
             text = "Refresh"
             setOnClickListener { explorer.refresh() }
         }
+        val files = Button(this).apply {
+            text = "Files"
+            setOnClickListener { showExplorer() }
+        }
+        val save = Button(this).apply {
+            text = "Save"
+            setOnClickListener { editorWorkspace.saveActive() }
+        }
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(chooseWorkspace)
             addView(createItem)
             addView(refresh)
+            addView(files)
+            addView(save)
         }
 
         val header = LinearLayout(this).apply {
@@ -82,18 +100,45 @@ class MainActivity : Activity() {
             ).apply { topMargin = 8 })
         }
 
+        workspaceBody = FrameLayout(this).apply {
+            addView(explorer, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            addView(editorWorkspace, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            editorWorkspace.visibility = View.GONE
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xFF151922.toInt())
             addView(header)
-            addView(explorer, LinearLayout.LayoutParams(
+            addView(workspaceBody, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             ))
         }
         setContentView(content)
     }
 
+    private fun showEditor() {
+        explorer.visibility = View.GONE
+        editorWorkspace.visibility = View.VISIBLE
+    }
+
+    private fun showExplorer() {
+        editorWorkspace.confirmDiscardAndRun {
+            editorWorkspace.visibility = View.GONE
+            explorer.visibility = View.VISIBLE
+        }
+    }
+
     private fun openWorkspacePicker() {
+        editorWorkspace.confirmDiscardAndRun {
+            launchWorkspacePicker()
+        }
+    }
+
+    private fun launchWorkspacePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
