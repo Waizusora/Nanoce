@@ -53,6 +53,53 @@ if(ANDROID)
         C_STANDARD 11
         C_STANDARD_REQUIRED ON
     )
+
+    FetchContent_Declare(
+        tree_sitter_c
+        GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-c.git
+        GIT_TAG v0.24.2
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_GetProperties(tree_sitter_c)
+    if(NOT tree_sitter_c_POPULATED)
+        FetchContent_Populate(tree_sitter_c)
+    endif()
+    add_library(tree-sitter-c STATIC
+        ${tree_sitter_c_SOURCE_DIR}/src/parser.c
+    )
+    target_include_directories(tree-sitter-c PRIVATE
+        ${tree_sitter_c_SOURCE_DIR}/src
+    )
+    target_link_libraries(tree-sitter-c PUBLIC tree-sitter)
+    set_target_properties(tree-sitter-c PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
+
+    FetchContent_Declare(
+        tree_sitter_cpp
+        GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
+        GIT_TAG v0.23.4
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_GetProperties(tree_sitter_cpp)
+    if(NOT tree_sitter_cpp_POPULATED)
+        FetchContent_Populate(tree_sitter_cpp)
+    endif()
+    add_library(tree-sitter-cpp STATIC
+        ${tree_sitter_cpp_SOURCE_DIR}/src/parser.c
+        ${tree_sitter_cpp_SOURCE_DIR}/src/scanner.c
+    )
+    target_include_directories(tree-sitter-cpp PRIVATE
+        ${tree_sitter_cpp_SOURCE_DIR}/src
+    )
+    target_link_libraries(tree-sitter-cpp PUBLIC tree-sitter)
+    set_target_properties(tree-sitter-cpp PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
 endif()
 
 add_library(nanoce_core STATIC
@@ -66,7 +113,7 @@ target_compile_features(nanoce_core PUBLIC cxx_std_20)
 if(ANDROID)
     target_compile_definitions(nanoce_core PUBLIC NANOCE_PLATFORM_ANDROID=1)
     add_library(nanoce_android SHARED native/android/jni_bridge.cpp)
-    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json)
+    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp)
     target_compile_features(nanoce_android PRIVATE cxx_std_20)
 endif()
 
