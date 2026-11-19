@@ -120,6 +120,13 @@ class MainActivity : Activity() {
         setContentView(content)
     }
 
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        editorWorkspace.confirmDiscardAndRun {
+            super.onBackPressed()
+        }
+    }
+
     private fun showEditor() {
         explorer.visibility = View.GONE
         editorWorkspace.visibility = View.VISIBLE
