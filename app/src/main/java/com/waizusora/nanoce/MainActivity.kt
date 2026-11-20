@@ -20,6 +20,7 @@ class MainActivity : Activity() {
     private lateinit var editorWorkspace: EditorWorkspaceView
     private lateinit var workspaceBody: FrameLayout
     private lateinit var welcome: LinearLayout
+    private var createAfterWorkspacePicker = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -160,6 +161,7 @@ class MainActivity : Activity() {
 
     private fun createProjectItem() {
         if (storageAccess.workspaceUri() == null) {
+            createAfterWorkspacePicker = true
             openWorkspacePicker()
             return
         }
@@ -245,7 +247,10 @@ class MainActivity : Activity() {
     @Deprecated("Uses platform document pickers for API 23 compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) {
+            if (requestCode == REQUEST_WORKSPACE) createAfterWorkspacePicker = false
+            return
+        }
         val uri: Uri = data?.data ?: return
         when (requestCode) {
             REQUEST_WORKSPACE -> {
@@ -255,7 +260,12 @@ class MainActivity : Activity() {
                     welcome.visibility = View.GONE
                     editorWorkspace.visibility = View.VISIBLE
                     explorer.visibility = View.VISIBLE
+                    if (createAfterWorkspacePicker) {
+                        createAfterWorkspacePicker = false
+                        explorer.showCreateActions()
+                    }
                 } catch (error: Exception) {
+                    createAfterWorkspacePicker = false
                     showMessage("Unable to access project: ${error.message ?: "unknown error"}")
                 }
             }
