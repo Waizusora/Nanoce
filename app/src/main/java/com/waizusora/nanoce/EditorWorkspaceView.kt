@@ -259,7 +259,6 @@ internal class EditorWorkspaceView(
     /** Restore only a fully validated snapshot; discard corrupt or obsolete payloads. */
     fun restoreSessionSnapshot(): Boolean {
         val file = sessionSnapshotFile()
-        if (!file.baseFile.exists()) return false
         val restored = runCatching {
             file.openRead().use { input ->
                 val maximum = SessionSnapshotCodec.MAX_TOTAL_BYTES + 1024 * 1024
@@ -289,7 +288,7 @@ internal class EditorWorkspaceView(
         documents.putAll(restoredDocuments)
         undoHistory.clear()
         redoHistory.clear()
-        activeUri = restored.activeUri?.let(Uri::parse)
+        activeUri = restored.activeUri?.let(Uri::parse) ?: restoredDocuments.keys.lastOrNull()
         renderTabs()
         val active = activeUri
         if (active != null) {
@@ -730,7 +729,7 @@ internal class EditorWorkspaceView(
         val lineCount = editor.text.count { it == '\n' } + 1
         lineNumbers.text = (1..lineCount).joinToString("\n")
         val widestNumber = lineNumbers.paint.measureText(lineCount.toString()).toInt()
-        val requiredWidth = widestNumber + lineNumbers.paddingLeft + lineNumbers.paddingRight
+        val requiredWidth = widestNumber + dp(2) + lineNumbers.paddingLeft + lineNumbers.paddingRight
         lineNumbers.layoutParams = lineNumbers.layoutParams.apply {
             width = maxOf(dp(48), requiredWidth)
         }
