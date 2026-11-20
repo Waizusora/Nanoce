@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "nanoce/nanoce.hpp"
+#include "nanoce/tree_sitter_edit.hpp"
 
 extern "C" const TSLanguage* tree_sitter_json();
 extern "C" const TSLanguage* tree_sitter_c();
@@ -472,55 +473,14 @@ const TSLanguage* parser_grammar(const std::string& language) {
     if (language == "kotlin") return tree_sitter_kotlin();
     return nullptr;
 }
-TSPoint point_at_byte(const std::string& source, size_t offset) {
-    TSPoint point{0, 0};
-    for (size_t i = 0; i < std::min(offset, source.size()); ++i) {
-        if (source[i] == '\n') { ++point.row; point.column = 0; }
-        else ++point.column;
-    }
-    return point;
-}
-bool utf8_continuation(unsigned char c) { return (c & 0xC0) == 0x80; }
-
 std::string incremental_captures(IncrementalParserSession& session,
                                  const std::string& next_source) {
     if (!session.tree) {
         session.tree = ts_parser_parse_string(session.parser, nullptr,
             next_source.data(), static_cast<uint32_t>(next_source.size()));
     } else if (session.source != next_source) {
-        size_t prefix = 0;
-        const size_t limit = std::min(session.source.size(), next_source.size());
-        while (prefix < limit && session.source[prefix] == next_source[prefix]) ++prefix;
-        while (prefix > 0 &&
-            ((prefix < session.source.size() && utf8_continuation(
-                static_cast<unsigned char>(session.source[prefix]))) ||
-             (prefix < next_source.size() && utf8_continuation(
-                static_cast<unsigned char>(next_source[prefix]))))) --prefix;
-
-        size_t suffix = 0;
-        while (suffix < session.source.size() - prefix &&
-               suffix < next_source.size() - prefix &&
-               session.source[session.source.size() - suffix - 1] ==
-               next_source[next_source.size() - suffix - 1]) ++suffix;
-        while (suffix > 0) {
-            const size_t old_end = session.source.size() - suffix;
-            const size_t new_end = next_source.size() - suffix;
-            const bool old_boundary = old_end == session.source.size() ||
-                !utf8_continuation(static_cast<unsigned char>(session.source[old_end]));
-            const bool new_boundary = new_end == next_source.size() ||
-                !utf8_continuation(static_cast<unsigned char>(next_source[new_end]));
-            if (old_boundary && new_boundary) break;
-            --suffix;
-        }
-        const size_t old_end = session.source.size() - suffix;
-        const size_t new_end = next_source.size() - suffix;
-        TSInputEdit edit{};
-        edit.start_byte = static_cast<uint32_t>(prefix);
-        edit.old_end_byte = static_cast<uint32_t>(old_end);
-        edit.new_end_byte = static_cast<uint32_t>(new_end);
-        edit.start_point = point_at_byte(session.source, prefix);
-        edit.old_end_point = point_at_byte(session.source, old_end);
-        edit.new_end_point = point_at_byte(next_source, new_end);
+        const TSInputEdit edit = nanoce::make_tree_sitter_edit(
+            session.source, next_source);
         ts_tree_edit(session.tree, &edit);
         TSTree* updated = ts_parser_parse_string(session.parser, session.tree,
             next_source.data(), static_cast<uint32_t>(next_source.size()));
