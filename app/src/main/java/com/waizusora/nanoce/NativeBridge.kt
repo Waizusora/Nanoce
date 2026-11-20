@@ -5,6 +5,7 @@ internal class NativeBridge {
     external fun nativeTreeSitterLanguageAbi(): Int
     external fun nativeJsonDiagnostics(source: String): String
     external fun nativeCodeDiagnostics(source: String, language: String): String
+    external fun nativeSyntaxHighlights(source: String, language: String): String
 
     companion object {
         init {
