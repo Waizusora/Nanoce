@@ -8,6 +8,8 @@ extern "C" const TSLanguage* tree_sitter_json();
 extern "C" const TSLanguage* tree_sitter_c();
 extern "C" const TSLanguage* tree_sitter_cpp();
 extern "C" const TSLanguage* tree_sitter_rust();
+extern "C" const TSLanguage* tree_sitter_python();
+extern "C" const TSLanguage* tree_sitter_kotlin();
 
 namespace {
 
@@ -105,6 +107,16 @@ int main() {
         "fn main() { let value: &str = \"Nanoce\"; println!(\"{}\", value); }",
         "fn main() { let value: = ;");
 
+    expect_language(
+        tree_sitter_python(),
+        "def main():\\n    return 42\\n",
+        "def main(:\\n    return 42\\n");
+
+    expect_language(
+        tree_sitter_kotlin(),
+        "fun main() { val value = 42 }",
+        "fun main( { val value = 42 }");
+
     const std::string unicode_rust =
         "fn main() {\n    let café = \"編輯器\";\n    println!(\"{}\", café);\n}";
     assert(parses_without_errors(tree_sitter_rust(), unicode_rust));
@@ -138,6 +150,27 @@ int main() {
         "(float_literal) @number \"fn\" @keyword \"let\" @keyword",
         "fn main() { let value = 42; }",
         "variable,keyword,number");
+
+    expect_query(tree_sitter_python(),
+        "(identifier) @variable (function_definition name: (identifier) @function) "
+        "(class_definition name: (identifier) @type) (string) @string "
+        "(comment) @comment [(integer) (float)] @number "
+        "[ (true) (false) (none) ] @constant "
+        "\"def\" @keyword \"return\" @keyword",
+        "def main():\\n    return 42\\n",
+        "variable,function,keyword,number");
+
+    expect_query(tree_sitter_kotlin(),
+        "(simple_identifier) @variable (type_identifier) @type "
+        "(function_declaration . (simple_identifier) @function) "
+        "(string_literal) @string (character_literal) @string "
+        "(line_comment) @comment (multiline_comment) @comment "
+        "[(integer_literal) (long_literal) (hex_literal) (bin_literal) "
+        "(unsigned_literal) (real_literal)] @number "
+        "[ (boolean_literal) (null_literal) ] @constant "
+        "\"fun\" @keyword \"val\" @keyword \"return\" @keyword",
+        "fun main() { val value = 42 }",
+        "variable,function,keyword,number");
 
     return 0;
 }
