@@ -1,8 +1,11 @@
 #include <tree_sitter/api.h>
+#include "nanoce/tree_sitter_edit.hpp"
 
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <vector>
+#include <cstdlib>
 
 extern "C" const TSLanguage* tree_sitter_json();
 extern "C" const TSLanguage* tree_sitter_c();
@@ -82,6 +85,54 @@ void expect_query(const TSLanguage* language, const std::string& query_source,
     ts_tree_delete(tree);
     ts_parser_delete(parser);
     ts_query_delete(query);
+}
+
+
+void expect_incremental_equivalent(const TSLanguage* language,
+                                    const std::vector<std::string>& revisions) {
+    assert(revisions.size() >= 2);
+    TSParser* incremental_parser = ts_parser_new();
+    TSParser* fresh_parser = ts_parser_new();
+    assert(incremental_parser != nullptr && fresh_parser != nullptr);
+    assert(ts_parser_set_language(incremental_parser, language));
+    assert(ts_parser_set_language(fresh_parser, language));
+
+    TSTree* incremental_tree = ts_parser_parse_string(
+        incremental_parser, nullptr, revisions.front().data(),
+        static_cast<uint32_t>(revisions.front().size()));
+    assert(incremental_tree != nullptr);
+    std::string previous = revisions.front();
+
+    for (size_t index = 1; index < revisions.size(); ++index) {
+        const std::string& current = revisions[index];
+        const TSInputEdit edit = nanoce::make_tree_sitter_edit(previous, current);
+        assert(edit.start_byte <= edit.old_end_byte);
+        assert(edit.start_byte <= edit.new_end_byte);
+        assert(edit.old_end_byte <= previous.size());
+        assert(edit.new_end_byte <= current.size());
+        ts_tree_edit(incremental_tree, &edit);
+
+        TSTree* updated = ts_parser_parse_string(incremental_parser,
+            incremental_tree, current.data(), static_cast<uint32_t>(current.size()));
+        assert(updated != nullptr);
+        ts_tree_delete(incremental_tree);
+        incremental_tree = updated;
+
+        TSTree* fresh_tree = ts_parser_parse_string(fresh_parser, nullptr,
+            current.data(), static_cast<uint32_t>(current.size()));
+        assert(fresh_tree != nullptr);
+        char* incremental_sexp = ts_node_string(ts_tree_root_node(incremental_tree));
+        char* fresh_sexp = ts_node_string(ts_tree_root_node(fresh_tree));
+        assert(incremental_sexp != nullptr && fresh_sexp != nullptr);
+        assert(std::string(incremental_sexp) == std::string(fresh_sexp));
+        std::free(incremental_sexp);
+        std::free(fresh_sexp);
+        ts_tree_delete(fresh_tree);
+        previous = current;
+    }
+    ts_tree_delete(incremental_tree);
+    ts_parser_delete(fresh_parser);
+    ts_parser_delete(incremental_parser);
 }
 
 }  // namespace
@@ -171,6 +222,27 @@ int main() {
         "\"fun\" @keyword \"val\" @keyword \"return\" @keyword",
         "fun main() { val value = 42 }",
         "variable,function,keyword,number");
+
+
+    expect_incremental_equivalent(tree_sitter_python(), {
+        "def main():\\n    return 42\\n",
+        "def main():\\n    value = 7\\n    return value\\n",
+        "def main():\\n    value = 7\\n    return value + 1\\n",
+        "def main():\\n    return 8\\n"
+    });
+    expect_incremental_equivalent(tree_sitter_rust(), {
+        "fn main() { let value = 1; }",
+        "fn main() { let value = 2; }",
+        "fn main() {\\n    let café = 2;\\n    println!(\\"{}\\", café);\\n}",
+        "fn main() {\\n    let café = 20;\\n    println!(\\"{}\\", café);\\n}",
+        "fn main() {\\n    println!(\\"done\\");\\n}"
+    });
+    expect_incremental_equivalent(tree_sitter_kotlin(), {
+        "fun main() { val value = 1 }",
+        "fun main() { val value = 12 }",
+        "fun main() {\\n    val label = \\"編輯器\\"\\n    println(label)\\n}",
+        "fun main() {\\n    println(\\"ready\\")\\n}"
+    });
 
     return 0;
 }
