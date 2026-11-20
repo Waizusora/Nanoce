@@ -70,6 +70,9 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Run parser lifecycle unit tests
+        run: gradle :app:testDebugUnitTest -PnanoceAbi=${{ matrix.abi }}
+
       - name: Build debug APK
         run: gradle :app:assembleDebug -PnanoceAbi=${{ matrix.abi }}
 

@@ -3,6 +3,7 @@ package com.waizusora.nanoce
 import android.app.AlertDialog
 import android.content.Context
 import android.net.Uri
+import android.util.AtomicFile
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
@@ -18,12 +19,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import java.util.concurrent.Executors
-
-private data class ParserSession(
-    val handle: Long,
-    val language: String
-)
 
 private data class EditorDocument(
     val uri: Uri,
@@ -39,7 +34,7 @@ private class CursorEditText(
     private val onCursorChanged: (() -> Unit)?
 ) : EditText(context) {
     private val activeLinePaint = android.graphics.Paint().apply {
-        color = 0x182F81F7
+        color = 0x1842C8F5
         style = android.graphics.Paint.Style.FILL
     }
 
@@ -89,29 +84,29 @@ internal class EditorWorkspaceView(
     }.apply {
         textSize = 14f
         typeface = android.graphics.Typeface.MONOSPACE
-        setTextColor(0xFFE6EAF0.toInt())
-        setHintTextColor(0xFF7F8A99.toInt())
+        setTextColor(context.getColor(R.color.nanoce_text))
+        setHintTextColor(context.getColor(R.color.nanoce_muted))
         setPadding(16, 14, 16, 24)
         gravity = Gravity.TOP or Gravity.START
         inputType = android.text.InputType.TYPE_CLASS_TEXT or
             android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
             android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         setHorizontallyScrolling(true)
-        setBackgroundColor(0xFF151922.toInt())
+        setBackgroundColor(context.getColor(R.color.nanoce_background))
     }
     private val lineNumbers = TextView(context).apply {
         textSize = 14f
         typeface = android.graphics.Typeface.MONOSPACE
         gravity = Gravity.TOP or Gravity.END
-        setTextColor(0xFF657184.toInt())
+        setTextColor(context.getColor(R.color.nanoce_muted))
         setPadding(8, 14, 10, 24)
-        setBackgroundColor(0xFF11161E.toInt())
+        setBackgroundColor(context.getColor(R.color.nanoce_background))
         isSingleLine = false
         text = "1"
     }
     private val status = TextView(context).apply {
         textSize = 11f
-        setTextColor(0xFF9AA4B2.toInt())
+        setTextColor(context.getColor(R.color.nanoce_muted))
         setPadding(12, 6, 12, 6)
     }
     private val checkJson = Button(context).apply {
@@ -123,7 +118,7 @@ internal class EditorWorkspaceView(
     }
     private val diagnosticView = TextView(context).apply {
         textSize = 12f
-        setTextColor(0xFFFFB4AB.toInt())
+        setTextColor(context.getColor(R.color.nanoce_error))
         setPadding(12, 4, 12, 6)
         visibility = View.GONE
         setOnClickListener { navigateToJsonError() }
@@ -137,17 +132,22 @@ internal class EditorWorkspaceView(
     private val redoHistory = mutableMapOf<Uri, MutableList<String>>()
     private var activeUri: Uri? = null
     private var changingText = false
-    private val syntaxSessions = mutableMapOf<Uri, ParserSession>()
-    private val parserExecutor = Executors.newSingleThreadExecutor()
     private val highlightHandler = Handler(Looper.getMainLooper())
     private val highlightRevisions = mutableMapOf<Uri, Long>()
     private var pendingHighlight: Runnable? = null
     private var pendingHighlightUri: Uri? = null
     private var disposed = false
+    private val parserSessionManagerDelegate = lazy {
+        ParserSessionManager(
+            NativeParserSessionBackend(nativeBridge),
+            dispatchResult = { result -> highlightHandler.post(result) }
+        )
+    }
+    private val parserSessionManager by parserSessionManagerDelegate
 
     init {
         orientation = VERTICAL
-        setBackgroundColor(0xFF151922.toInt())
+        setBackgroundColor(context.getColor(R.color.nanoce_background))
         addView(tabScroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
@@ -224,13 +224,100 @@ internal class EditorWorkspaceView(
         showEmptyState()
     }
 
+    /** Persist open tabs and unsaved buffers for Activity recreation. */
+    fun saveSessionSnapshot(): Boolean {
+        val snapshotDocuments = documents.values.toList()
+        if (snapshotDocuments.size > MAX_SNAPSHOT_DOCUMENTS) return false
+        val file = sessionSnapshotFile()
+        var output: java.io.FileOutputStream? = null
+        return try {
+            val stream = file.startWrite()
+            output = stream
+            val data = java.io.DataOutputStream(stream)
+            data.writeInt(SESSION_SNAPSHOT_MAGIC)
+            data.writeInt(snapshotDocuments.size)
+            data.writeUTF(activeUri?.toString().orEmpty())
+            data.writeInt(editor.selectionStart.coerceAtLeast(0))
+            var totalBytes = 0
+            snapshotDocuments.forEach { document ->
+                val textBytes = document.text.toByteArray(Charsets.UTF_8)
+                val savedBytes = document.savedText.toByteArray(Charsets.UTF_8)
+                totalBytes += textBytes.size + savedBytes.size
+                require(totalBytes <= MAX_SNAPSHOT_BYTES)
+                data.writeUTF(document.uri.toString())
+                data.writeUTF(document.name)
+                data.writeInt(textBytes.size)
+                data.write(textBytes)
+                data.writeInt(savedBytes.size)
+                data.write(savedBytes)
+            }
+            data.flush()
+            file.finishWrite(stream)
+            output = null
+            true
+        } catch (_: Exception) {
+            output?.let { file.failWrite(it) }
+            false
+        }
+    }
+
+    /** Restore tabs; native parser handles are recreated lazily for the active document. */
+    fun restoreSessionSnapshot(): Boolean {
+        val file = sessionSnapshotFile()
+        if (!file.baseFile.exists()) return false
+        return runCatching {
+            file.openRead().use { input ->
+                val data = java.io.DataInputStream(input)
+                require(data.readInt() == SESSION_SNAPSHOT_MAGIC)
+                val count = data.readInt()
+                require(count in 0..MAX_SNAPSHOT_DOCUMENTS)
+                val restoredActive = data.readUTF().takeIf { it.isNotEmpty() }?.let(Uri::parse)
+                val cursor = data.readInt().coerceAtLeast(0)
+                val restored = linkedMapOf<Uri, EditorDocument>()
+                var totalBytes = 0
+                repeat(count) {
+                    val uri = Uri.parse(data.readUTF())
+                    val name = data.readUTF()
+                    val textSize = data.readInt()
+                    require(textSize in 0..MAX_DOCUMENT_BYTES)
+                    val textBytes = ByteArray(textSize)
+                    data.readFully(textBytes)
+                    val savedSize = data.readInt()
+                    require(savedSize in 0..MAX_DOCUMENT_BYTES)
+                    val savedBytes = ByteArray(savedSize)
+                    data.readFully(savedBytes)
+                    totalBytes += textSize + savedSize
+                    require(totalBytes <= MAX_SNAPSHOT_BYTES)
+                    restored[uri] = EditorDocument(uri, name, String(textBytes, Charsets.UTF_8), String(savedBytes, Charsets.UTF_8))
+                }
+                documents.clear()
+                documents.putAll(restored)
+                undoHistory.clear()
+                redoHistory.clear()
+                activeUri = restoredActive?.takeIf { it in documents } ?: documents.keys.lastOrNull()
+                renderTabs()
+                val active = activeUri
+                if (active != null) {
+                    activate(active)
+                    editor.setSelection(cursor.coerceAtMost(editor.text.length))
+                } else {
+                    showEmptyState()
+                }
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    fun clearSessionSnapshot() { sessionSnapshotFile().delete() }
+
+    private fun sessionSnapshotFile(): AtomicFile =
+        AtomicFile(java.io.File(context.filesDir, SESSION_SNAPSHOT_NAME))
     /** Release parser resources when the owning Activity is destroyed. */
     fun dispose() {
         if (disposed) return
         disposed = true
         cancelPendingHighlight()
-        destroyAllSyntaxSessions()
-        parserExecutor.shutdown()
+        if (parserSessionManagerDelegate.isInitialized()) parserSessionManager.dispose()
     }
 
     fun openDocument(uri: Uri, name: String, text: String) {
@@ -359,8 +446,12 @@ internal class EditorWorkspaceView(
     }
 
     private fun closeAllDocuments() {
-        destroyAllSyntaxSessions()
+        cancelPendingHighlight()
+        if (parserSessionManagerDelegate.isInitialized()) {
+            parserSessionManager.closeDocuments(documents.keys.map(Uri::toString))
+        }
         documents.clear()
+        highlightRevisions.clear()
         undoHistory.clear()
         redoHistory.clear()
         activeUri = null
@@ -399,14 +490,14 @@ internal class EditorWorkspaceView(
                 orientation = HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(8, 2, 4, 2)
-                setBackgroundColor(if (selected) 0xFF263548.toInt() else 0xFF1B222D.toInt())
+                setBackgroundColor(if (selected) context.getColor(R.color.nanoce_tab_selected) else context.getColor(R.color.nanoce_background))
             }
-            val label = Button(context).apply {
+            val label = TextView(context).apply {
                 text = document.name + if (document.isDirty) " •" else ""
-                textSize = 11f
-                isAllCaps = false
-                setTextColor(if (selected) 0xFF80D8FF.toInt() else 0xFFCBD5E1.toInt())
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                textSize = 12f
+                setTextColor(if (selected) context.getColor(R.color.nanoce_accent) else context.getColor(R.color.nanoce_text))
+                setBackgroundResource(R.drawable.toolbar_action_background)
+                setPadding(8, 8, 8, 8)
                 setOnClickListener { activate(document.uri) }
                 setOnLongClickListener {
                     requestClose(document.uri)
@@ -416,7 +507,7 @@ internal class EditorWorkspaceView(
             val close = TextView(context).apply {
                 text = "×"
                 textSize = 18f
-                setTextColor(0xFF9AA4B2.toInt())
+                setTextColor(context.getColor(R.color.nanoce_muted))
                 setPadding(8, 4, 8, 4)
                 setOnClickListener { requestClose(document.uri) }
             }
@@ -429,7 +520,11 @@ internal class EditorWorkspaceView(
     private fun requestClose(uri: Uri) {
         val document = documents[uri] ?: return
         val close = {
-            destroySyntaxSession(uri)
+            if (pendingHighlightUri == uri) cancelPendingHighlight()
+            if (parserSessionManagerDelegate.isInitialized()) parserSessionManager.closeDocument(uri.toString())
+            highlightRevisions.remove(uri)
+            undoHistory.remove(uri)
+            redoHistory.remove(uri)
             documents.remove(uri)
             if (activeUri == uri) {
                 activeUri = documents.keys.lastOrNull()
@@ -516,7 +611,7 @@ internal class EditorWorkspaceView(
         if (partner < 0) return
 
         listOf(candidate, partner).forEach { index ->
-            val span = android.text.style.BackgroundColorSpan(0xFF665C32.toInt())
+            val span = android.text.style.BackgroundColorSpan(0x6642C8F5)
             editable.setSpan(span, index, index + 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             bracketHighlightSpans.add(span)
         }
@@ -540,40 +635,19 @@ internal class EditorWorkspaceView(
             SyntaxHighlighter.apply(editor.text, language)
             return
         }
-
-        var session = syntaxSessions[uri]
-        if (session?.language != parserLanguage) {
-            destroySyntaxSession(uri)
-            val handle = runCatching {
-                nativeBridge.nativeCreateParserSession(parserLanguage)
-            }.getOrDefault(0L)
-            session = if (handle != 0L) {
-                ParserSession(handle, parserLanguage).also { syntaxSessions[uri] = it }
-            } else null
-        }
-        if (session == null) {
-            SyntaxHighlighter.apply(editor.text, language)
-            return
-        }
-
         val source = editor.text.toString()
         val revision = (highlightRevisions[uri] ?: 0L) + 1L
         highlightRevisions[uri] = revision
         cancelPendingHighlight()
-        val handle = session.handle
         val task = Runnable {
-            parserExecutor.execute {
-                val encoded = runCatching {
-                    nativeBridge.nativeUpdateParserSession(handle, source)
-                }.getOrNull()
-                highlightHandler.post {
-                    if (disposed || activeUri != uri || highlightRevisions[uri] != revision ||
-                        editor.text.toString() != source) return@post
-                    val applied = encoded?.let {
-                        SyntaxHighlighter.applyTreeSitterResult(editor.text, it)
-                    } ?: false
-                    if (!applied) SyntaxHighlighter.apply(editor.text, language)
-                }
+            if (disposed || activeUri != uri || highlightRevisions[uri] != revision) return@Runnable
+            parserSessionManager.request(uri.toString(), parserLanguage, source) { encoded ->
+                if (disposed || activeUri != uri || highlightRevisions[uri] != revision ||
+                    editor.text.toString() != source) return@request
+                val applied = encoded?.let {
+                    SyntaxHighlighter.applyTreeSitterResult(editor.text, it)
+                } ?: false
+                if (!applied) SyntaxHighlighter.apply(editor.text, language)
             }
         }
         pendingHighlight = task
@@ -585,19 +659,6 @@ internal class EditorWorkspaceView(
         pendingHighlight?.let(highlightHandler::removeCallbacks)
         pendingHighlight = null
         pendingHighlightUri = null
-    }
-
-    private fun destroySyntaxSession(uri: Uri) {
-        if (pendingHighlightUri == uri) cancelPendingHighlight()
-        highlightRevisions[uri] = (highlightRevisions[uri] ?: 0L) + 1L
-        val session = syntaxSessions.remove(uri) ?: return
-        parserExecutor.execute {
-            runCatching { nativeBridge.nativeDestroyParserSession(session.handle) }
-        }
-    }
-
-    private fun destroyAllSyntaxSessions() {
-        syntaxSessions.keys.toList().forEach(::destroySyntaxSession)
     }
 
     private fun supportsNativeValidation(name: String): Boolean =
@@ -645,7 +706,7 @@ internal class EditorWorkspaceView(
                 diagnosticView.text = jsonDiagnostic
                 diagnosticView.visibility = View.VISIBLE
                 diagnosticView.isClickable = jsonErrorLine != null
-                diagnosticView.setTextColor(if (jsonErrorLine != null) 0xFFFFB4AB.toInt() else 0xFF9AD7A0.toInt())
+                diagnosticView.setTextColor(if (jsonErrorLine != null) context.getColor(R.color.nanoce_error) else context.getColor(R.color.nanoce_success))
                 updateStatus()
                 toast(jsonDiagnostic!!)
             }.onFailure { error ->
@@ -700,5 +761,10 @@ internal class EditorWorkspaceView(
 
     companion object {
         private const val MAX_UNDO_STEPS = 200
+        private const val SESSION_SNAPSHOT_MAGIC = 0x4E414E43
+        private const val SESSION_SNAPSHOT_NAME = "nanoce-editor-session.bin"
+        private const val MAX_SNAPSHOT_DOCUMENTS = 64
+        private const val MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
+        private const val MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
     }
 }

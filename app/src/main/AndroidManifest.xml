@@ -6,7 +6,7 @@
         android:allowBackup="false"
         android:label="Nanoce"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/NanoceTheme">
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"

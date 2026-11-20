@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launcher_background">#151922</color>
+    <color name="nanoce_background">#0A0A2E</color>
+    <color name="nanoce_surface">#0A0A2E</color>
+    <color name="nanoce_text">#F1F1FF</color>
+    <color name="nanoce_muted">#A6A6C8</color>
+    <color name="nanoce_accent">#42C8F5</color>
+    <color name="nanoce_divider">#29294D</color>
+    <color name="nanoce_error">#FF8A80</color>
+    <color name="nanoce_success">#9AD7A0</color>
+    <color name="nanoce_tab_selected">#20204A</color>
 </resources>

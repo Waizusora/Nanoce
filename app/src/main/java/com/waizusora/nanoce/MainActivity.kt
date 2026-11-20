@@ -103,7 +103,7 @@ class MainActivity : Activity() {
             setBackgroundColor(0xFF151922.toInt())
             addView(title)
             addView(topToolbar, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 64
+                ViewGroup.LayoutParams.MATCH_PARENT, 56
             ))
             addView(separator())
         }

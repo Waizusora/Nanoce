@@ -30,7 +30,7 @@ internal class ProjectExplorerView(
     init {
         addView(rows)
         setFillViewport(true)
-        setBackgroundColor(0xFF151922.toInt())
+        setBackgroundColor(context.getColor(R.color.nanoce_background))
     }
 
     fun showWorkspace(uri: Uri?) {
@@ -45,10 +45,10 @@ internal class ProjectExplorerView(
         rows.removeAllViews()
         val root = rootUri
         if (root == null) {
-            addLabel("Choose a project folder to browse its files.", 0xFF9AA4B2.toInt())
+            addLabel("Choose a project folder to browse its files.", context.getColor(R.color.nanoce_muted))
             return
         }
-        addLabel("PROJECT", 0xFF7F8A99.toInt(), 11f)
+        addLabel("PROJECT", context.getColor(R.color.nanoce_muted), 11f)
         renderDirectory(root, 0, 0)
     }
 
@@ -57,13 +57,13 @@ internal class ProjectExplorerView(
         val children = try {
             storage.listChildren(directoryUri)
         } catch (error: Exception) {
-            addLabel("Unable to list folder: ${error.message ?: "access error"}", 0xFFFF8A80.toInt(), 12f, depth)
+            addLabel("Unable to list folder: ${error.message ?: "access error"}", context.getColor(R.color.nanoce_error), 12f, depth)
             return
         }
 
         children.forEach { entry ->
             if (rows.childCount >= MAX_ENTRIES) {
-                addLabel("Entry limit reached. Open a subfolder to browse more.", 0xFF9AA4B2.toInt(), 12f, depth)
+                addLabel("Entry limit reached. Open a subfolder to browse more.", context.getColor(R.color.nanoce_muted), 12f, depth)
                 return
             }
             val isExpanded = entry.isDirectory && entry.uri in expanded
@@ -76,7 +76,7 @@ internal class ProjectExplorerView(
             val row = TextView(context).apply {
                 text = prefix + symbol + entry.name
                 textSize = 14f
-                setTextColor(if (entry.isDirectory) 0xFFE6EAF0.toInt() else 0xFFB8C2D0.toInt())
+                setTextColor(if (entry.isDirectory) context.getColor(R.color.nanoce_text) else context.getColor(R.color.nanoce_text))
                 setPadding(8 + depth * INDENT, 10, 8, 10)
                 isSingleLine = true
                 ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
