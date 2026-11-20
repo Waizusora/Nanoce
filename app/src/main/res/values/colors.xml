@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launcher_background">#151922</color>
+    <color name="launcher_background">#000000</color>
     <color name="nanoce_background">#0A0A2E</color>
     <color name="nanoce_surface">#0A0A2E</color>
     <color name="nanoce_text">#F1F1FF</color>
