@@ -120,6 +120,11 @@ class MainActivity : Activity() {
         setContentView(content)
     }
 
+    override fun onDestroy() {
+        editorWorkspace.dispose()
+        super.onDestroy()
+    }
+
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         editorWorkspace.confirmDiscardAndRun {
