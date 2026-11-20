@@ -436,18 +436,19 @@ internal class EditorWorkspaceView(
 
     private fun supportsNativeValidation(name: String): Boolean =
         name.substringAfterLast('.', "").lowercase() in
-            setOf("json", "c", "h", "cc", "hh", "cpp", "hpp", "cxx", "hxx")
+            setOf("json", "c", "h", "cc", "hh", "cpp", "hpp", "cxx", "hxx", "rs")
 
     private fun validateActiveSource() {
         val document = activeDocument() ?: return
         val extension = document.name.substringAfterLast('.', "").lowercase()
         val language = when (extension) {
             "json" -> "json"
+            "rs" -> "rust"
             "c", "h" -> "c"
             "cc", "hh", "cpp", "hpp", "cxx", "hxx" -> "cpp"
             else -> { toast("No native parser for this file type"); return }
         }
-        val languageLabel = when (language) { "json" -> "JSON"; "c" -> "C"; else -> "C++" }
+        val languageLabel = when (language) { "json" -> "JSON"; "c" -> "C"; "rust" -> "Rust"; else -> "C++" }
         runCatching { nativeBridge.nativeCodeDiagnostics(editor.text.toString(), language) }
             .onSuccess { result ->
                 jsonErrorLine = null
