@@ -84,7 +84,6 @@ class MainActivity : Activity() {
         workspaceBody.addView(welcome, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
-        if (storageAccess.workspaceUri() != null) welcome.visibility = View.GONE
 
         val bottomToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
