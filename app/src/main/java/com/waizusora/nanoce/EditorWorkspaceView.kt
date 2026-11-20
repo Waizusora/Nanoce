@@ -3,6 +3,8 @@ package com.waizusora.nanoce
 import android.app.AlertDialog
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.InputFilter
 import android.text.TextWatcher
@@ -16,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.util.concurrent.Executors
 
 private data class ParserSession(
     val handle: Long,
@@ -131,6 +134,11 @@ internal class EditorWorkspaceView(
     private var activeUri: Uri? = null
     private var changingText = false
     private val syntaxSessions = mutableMapOf<Uri, ParserSession>()
+    private val parserExecutor = Executors.newSingleThreadExecutor()
+    private val highlightHandler = Handler(Looper.getMainLooper())
+    private val highlightRevisions = mutableMapOf<Uri, Long>()
+    private var pendingHighlight: Runnable? = null
+    private var pendingHighlightUri: Uri? = null
 
     init {
         orientation = VERTICAL
@@ -444,36 +452,66 @@ internal class EditorWorkspaceView(
             EditorLanguage.PYTHON -> "python"
             else -> null
         }
-        if (parserLanguage == null) {
+        val uri = activeUri
+        if (parserLanguage == null || uri == null) {
+            cancelPendingHighlight()
             SyntaxHighlighter.apply(editor.text, language)
             return
         }
-        val uri = activeUri ?: run {
-            SyntaxHighlighter.apply(editor.text, language)
-            return
-        }
+
         var session = syntaxSessions[uri]
         if (session?.language != parserLanguage) {
             destroySyntaxSession(uri)
             val handle = runCatching {
                 nativeBridge.nativeCreateParserSession(parserLanguage)
             }.getOrDefault(0L)
-            if (handle != 0L) {
-                session = ParserSession(handle, parserLanguage)
-                syntaxSessions[uri] = session
-            } else {
-                session = null
+            session = if (handle != 0L) {
+                ParserSession(handle, parserLanguage).also { syntaxSessions[uri] = it }
+            } else null
+        }
+        if (session == null) {
+            SyntaxHighlighter.apply(editor.text, language)
+            return
+        }
+
+        val source = editor.text.toString()
+        val revision = (highlightRevisions[uri] ?: 0L) + 1L
+        highlightRevisions[uri] = revision
+        cancelPendingHighlight()
+        val handle = session.handle
+        val task = Runnable {
+            parserExecutor.execute {
+                val encoded = runCatching {
+                    nativeBridge.nativeUpdateParserSession(handle, source)
+                }.getOrNull()
+                highlightHandler.post {
+                    if (activeUri != uri || highlightRevisions[uri] != revision ||
+                        editor.text.toString() != source) return@post
+                    val applied = encoded?.let {
+                        SyntaxHighlighter.applyTreeSitterResult(editor.text, it)
+                    } ?: false
+                    if (!applied) SyntaxHighlighter.apply(editor.text, language)
+                }
             }
         }
-        if (session == null ||
-            !SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge, session.handle)) {
-            SyntaxHighlighter.apply(editor.text, language)
-        }
+        pendingHighlight = task
+        pendingHighlightUri = uri
+        highlightHandler.postDelayed(task, 120L)
+    }
+
+    private fun cancelPendingHighlight() {
+        pendingHighlight?.let(highlightHandler::removeCallbacks)
+        pendingHighlight = null
+        pendingHighlightUri = null
     }
 
     private fun destroySyntaxSession(uri: Uri) {
+        if (pendingHighlightUri == uri) cancelPendingHighlight()
+        highlightRevisions[uri] = (highlightRevisions[uri] ?: 0L) + 1L
         val session = syntaxSessions.remove(uri) ?: return
-        runCatching { nativeBridge.nativeDestroyParserSession(session.handle) }
+        parserExecutor.execute {
+            runCatching { nativeBridge.nativeDestroyParserSession(session.handle) }
+        }
     }
 
     private fun destroyAllSyntaxSessions() {
