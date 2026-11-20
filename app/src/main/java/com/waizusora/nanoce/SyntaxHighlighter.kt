@@ -45,6 +45,8 @@ internal object SyntaxHighlighter {
             EditorLanguage.JSON -> "json"
             EditorLanguage.CPP -> "cpp"
             EditorLanguage.RUST -> "rust"
+            EditorLanguage.KOTLIN -> "kotlin"
+            EditorLanguage.PYTHON -> "python"
             else -> return false
         }
         text.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach(text::removeSpan)
@@ -59,6 +61,7 @@ internal object SyntaxHighlighter {
         val colors = mapOf(
             "keyword" to KEYWORD,
             "type" to KEYWORD,
+            "function" to 0xFFDCDCAA.toInt(),
             "string" to STRING,
             "comment" to COMMENT,
             "number" to NUMBER,
