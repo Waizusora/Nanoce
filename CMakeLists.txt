@@ -89,6 +89,7 @@ if(ANDROID)
     endif()
     add_library(tree-sitter-rust STATIC
         ${tree_sitter_rust_SOURCE_DIR}/src/parser.c
+        ${tree_sitter_rust_SOURCE_DIR}/src/scanner.c
     )
     target_include_directories(tree-sitter-rust PRIVATE
         ${tree_sitter_rust_SOURCE_DIR}/src
