@@ -5,6 +5,9 @@
 #include <cstdio>
 #include <cstdint>
 #include <string>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include "nanoce/nanoce.hpp"
 
@@ -441,4 +444,157 @@ Java_com_waizusora_nanoce_NativeBridge_nativeSyntaxHighlights(
     ts_tree_delete(tree);
     ts_parser_delete(parser);
     return env->NewStringUTF(output.c_str());
+}
+
+
+namespace {
+struct IncrementalParserSession {
+    TSParser* parser = nullptr;
+    TSTree* tree = nullptr;
+    TSQuery* query = nullptr;
+    std::string source;
+    ~IncrementalParserSession() {
+        if (query) ts_query_delete(query);
+        if (tree) ts_tree_delete(tree);
+        if (parser) ts_parser_delete(parser);
+    }
+};
+std::mutex session_mutex;
+std::unordered_map<jlong, std::unique_ptr<IncrementalParserSession>> sessions;
+jlong next_session_id = 1;
+
+const TSLanguage* parser_grammar(const std::string& language) {
+    if (language == "json") return tree_sitter_json();
+    if (language == "c") return tree_sitter_c();
+    if (language == "cpp") return tree_sitter_cpp();
+    if (language == "rust") return tree_sitter_rust();
+    if (language == "python") return tree_sitter_python();
+    if (language == "kotlin") return tree_sitter_kotlin();
+    return nullptr;
+}
+TSPoint point_at_byte(const std::string& source, size_t offset) {
+    TSPoint point{0, 0};
+    for (size_t i = 0; i < std::min(offset, source.size()); ++i) {
+        if (source[i] == '\n') { ++point.row; point.column = 0; }
+        else ++point.column;
+    }
+    return point;
+}
+bool utf8_continuation(unsigned char c) { return (c & 0xC0) == 0x80; }
+
+std::string incremental_captures(IncrementalParserSession& session,
+                                 const std::string& next_source) {
+    if (!session.tree) {
+        session.tree = ts_parser_parse_string(session.parser, nullptr,
+            next_source.data(), static_cast<uint32_t>(next_source.size()));
+    } else if (session.source != next_source) {
+        size_t prefix = 0;
+        const size_t limit = std::min(session.source.size(), next_source.size());
+        while (prefix < limit && session.source[prefix] == next_source[prefix]) ++prefix;
+        while (prefix > 0 &&
+            ((prefix < session.source.size() && utf8_continuation(
+                static_cast<unsigned char>(session.source[prefix]))) ||
+             (prefix < next_source.size() && utf8_continuation(
+                static_cast<unsigned char>(next_source[prefix]))))) --prefix;
+
+        size_t suffix = 0;
+        while (suffix < session.source.size() - prefix &&
+               suffix < next_source.size() - prefix &&
+               session.source[session.source.size() - suffix - 1] ==
+               next_source[next_source.size() - suffix - 1]) ++suffix;
+        while (suffix > 0) {
+            const size_t old_end = session.source.size() - suffix;
+            const size_t new_end = next_source.size() - suffix;
+            const bool old_boundary = old_end == session.source.size() ||
+                !utf8_continuation(static_cast<unsigned char>(session.source[old_end]));
+            const bool new_boundary = new_end == next_source.size() ||
+                !utf8_continuation(static_cast<unsigned char>(next_source[new_end]));
+            if (old_boundary && new_boundary) break;
+            --suffix;
+        }
+        const size_t old_end = session.source.size() - suffix;
+        const size_t new_end = next_source.size() - suffix;
+        TSInputEdit edit{};
+        edit.start_byte = static_cast<uint32_t>(prefix);
+        edit.old_end_byte = static_cast<uint32_t>(old_end);
+        edit.new_end_byte = static_cast<uint32_t>(new_end);
+        edit.start_point = point_at_byte(session.source, prefix);
+        edit.old_end_point = point_at_byte(session.source, old_end);
+        edit.new_end_point = point_at_byte(next_source, new_end);
+        ts_tree_edit(session.tree, &edit);
+        TSTree* updated = ts_parser_parse_string(session.parser, session.tree,
+            next_source.data(), static_cast<uint32_t>(next_source.size()));
+        if (!updated) return "PARSER_ERROR";
+        ts_tree_delete(session.tree);
+        session.tree = updated;
+    }
+    session.source = next_source;
+    if (!session.tree) return "PARSER_ERROR";
+    TSQueryCursor* cursor = ts_query_cursor_new();
+    if (!cursor) return "PARSER_ERROR";
+    ts_query_cursor_exec(cursor, session.query, ts_tree_root_node(session.tree));
+    std::string output;
+    TSQueryMatch match{};
+    uint32_t capture_index = 0;
+    while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+        const TSQueryCapture& capture = match.captures[capture_index];
+        uint32_t name_length = 0;
+        const char* name = ts_query_capture_name_for_id(
+            session.query, capture.index, &name_length);
+        const uint32_t start = utf16_offset(next_source,
+            ts_node_start_byte(capture.node));
+        const uint32_t end = utf16_offset(next_source,
+            ts_node_end_byte(capture.node));
+        if (end > start) output += std::to_string(start) + ":" +
+            std::to_string(end) + ":" + std::string(name, name_length) + ";";
+    }
+    ts_query_cursor_delete(cursor);
+    return output;
+}
+} // namespace
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_waizusora_nanoce_NativeBridge_nativeCreateParserSession(
+    JNIEnv* env, jobject, jstring language) {
+    if (!language) return 0;
+    const char* chars = env->GetStringUTFChars(language, nullptr);
+    if (!chars) return 0;
+    const std::string language_name(chars);
+    env->ReleaseStringUTFChars(language, chars);
+    const TSLanguage* grammar = parser_grammar(language_name);
+    const char* query_source = highlight_query(language_name);
+    if (!grammar || !query_source) return 0;
+    auto session = std::make_unique<IncrementalParserSession>();
+    session->parser = ts_parser_new();
+    if (!session->parser || !ts_parser_set_language(session->parser, grammar)) return 0;
+    uint32_t error_offset = 0;
+    TSQueryError error_type = TSQueryErrorNone;
+    session->query = ts_query_new(grammar, query_source,
+        static_cast<uint32_t>(std::char_traits<char>::length(query_source)),
+        &error_offset, &error_type);
+    if (!session->query) return 0;
+    std::lock_guard<std::mutex> lock(session_mutex);
+    const jlong id = next_session_id++;
+    sessions.emplace(id, std::move(session));
+    return id;
+}
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_waizusora_nanoce_NativeBridge_nativeUpdateParserSession(
+    JNIEnv* env, jobject, jlong id, jstring source) {
+    if (!source || id == 0) return env->NewStringUTF("PARSER_ERROR");
+    const std::string utf8 = java_string_to_utf8(env, source);
+    if (env->ExceptionCheck()) return nullptr;
+    if (utf8.size() > UINT32_MAX) return env->NewStringUTF("INPUT_TOO_LARGE");
+    std::lock_guard<std::mutex> lock(session_mutex);
+    const auto found = sessions.find(id);
+    if (found == sessions.end()) return env->NewStringUTF("PARSER_ERROR");
+    const std::string output = incremental_captures(*found->second, utf8);
+    return env->NewStringUTF(output.c_str());
+}
+extern "C" JNIEXPORT void JNICALL
+Java_com_waizusora_nanoce_NativeBridge_nativeDestroyParserSession(
+    JNIEnv*, jobject, jlong id) {
+    if (id == 0) return;
+    std::lock_guard<std::mutex> lock(session_mutex);
+    sessions.erase(id);
 }
