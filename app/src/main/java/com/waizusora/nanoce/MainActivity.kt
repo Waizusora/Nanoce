@@ -42,7 +42,7 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "Nanoce"
             textSize = 23f
-            setTextColor(0xFFE6EAF0.toInt())
+            setTextColor(getColor(R.color.nanoce_text))
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16, 8, 12, 4)
         }
@@ -56,7 +56,7 @@ class MainActivity : Activity() {
         }
 
         workspaceBody = FrameLayout(this).apply {
-            setBackgroundColor(0xFF151922.toInt())
+            setBackgroundColor(getColor(R.color.nanoce_background))
             addView(editorWorkspace, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             ))
@@ -69,18 +69,18 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(28, 24, 28, 24)
-            setBackgroundColor(0xFF151922.toInt())
+            setBackgroundColor(getColor(R.color.nanoce_background))
             addView(TextView(this@MainActivity).apply {
                 text = "Open or create a project"
                 textSize = 20f
                 gravity = Gravity.CENTER
-                setTextColor(0xFFE6EAF0.toInt())
+                setTextColor(getColor(R.color.nanoce_text))
             })
             addView(TextView(this@MainActivity).apply {
                 text = "Choose a project folder to start editing."
                 textSize = 13f
                 gravity = Gravity.CENTER
-                setTextColor(0xFF9AA4B2.toInt())
+                setTextColor(getColor(R.color.nanoce_muted))
                 setPadding(0, 10, 0, 0)
             })
         }
@@ -100,8 +100,10 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF151922.toInt())
-            addView(title)
+            setBackgroundColor(getColor(R.color.nanoce_background))
+            addView(title, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 44
+            ))
             addView(topToolbar, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 56
             ))
@@ -109,7 +111,7 @@ class MainActivity : Activity() {
         }
         val footer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF151922.toInt())
+            setBackgroundColor(getColor(R.color.nanoce_background))
             addView(separator())
             addView(bottomToolbar, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 64
@@ -117,7 +119,7 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF151922.toInt())
+            setBackgroundColor(getColor(R.color.nanoce_background))
             addView(header)
             addView(workspaceBody, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
@@ -139,7 +141,21 @@ class MainActivity : Activity() {
             insets
         }
         setContentView(content)
+        window.statusBarColor = getColor(R.color.nanoce_background)
+        window.navigationBarColor = getColor(R.color.nanoce_background)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
+        window.decorView.systemUiVisibility = 0
         content.requestApplyInsets()
+        if (savedInstanceState?.getBoolean(STATE_EDITOR_SESSION) == true &&
+            editorWorkspace.restoreSessionSnapshot()
+        ) {
+            welcome.visibility = View.GONE
+            explorer.visibility = View.GONE
+            editorWorkspace.visibility = View.VISIBLE
+        }
     }
 
     private fun addToolbarAction(
@@ -148,30 +164,36 @@ class MainActivity : Activity() {
         label: String,
         action: () -> Unit
     ) {
-        toolbar.addView(
-            iconButton(symbol, label, action),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-        )
-    }
-
-    private fun iconButton(symbol: String, label: String, action: () -> Unit): TextView =
-        TextView(this).apply {
-            text = symbol
-            contentDescription = label
-            textSize = 27f
+        val item = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setTextColor(0xFFD6DEE9.toInt())
-            setPadding(4, 4, 4, 4)
-            minWidth = 56
-            minHeight = 56
+            contentDescription = label
             isClickable = true
             isFocusable = true
+            setPadding(3, 3, 3, 3)
+            setBackgroundResource(R.drawable.toolbar_action_background)
+            addView(TextView(this@MainActivity).apply {
+                text = symbol
+                textSize = 21f
+                gravity = Gravity.CENTER
+                setTextColor(getColor(R.color.nanoce_text))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 0, 1f))
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 10f
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setTextColor(getColor(R.color.nanoce_muted))
+            })
             setOnClickListener { action() }
-            setBackgroundResource(android.R.drawable.list_selector_background)
         }
+        toolbar.addView(item, LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+        ))
+    }
 
     private fun separator(): View = View(this).apply {
-        setBackgroundColor(0xFF303846.toInt())
+        setBackgroundColor(getColor(R.color.nanoce_divider))
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 1
         )
@@ -233,26 +255,26 @@ class MainActivity : Activity() {
                 text = "Nanoce"
                 textSize = 26f
                 gravity = Gravity.CENTER
-                setTextColor(0xFFE6EAF0.toInt())
+                setTextColor(getColor(R.color.nanoce_text))
             })
             addView(TextView(this@MainActivity).apply {
                 text = "Nano Code Editor\nnanoce-dev\nNative core: ${nativeBridge.nativeVersion()}"
                 textSize = 13f
                 gravity = Gravity.CENTER
-                setTextColor(0xFF9AA4B2.toInt())
+                setTextColor(getColor(R.color.nanoce_muted))
                 setPadding(0, 8, 0, 18)
             })
             addView(separator())
             addView(TextView(this@MainActivity).apply {
                 text = "Open Source Notices"
                 textSize = 16f
-                setTextColor(0xFFE6EAF0.toInt())
+                setTextColor(getColor(R.color.nanoce_text))
                 setPadding(0, 14, 0, 8)
             })
             addView(TextView(this@MainActivity).apply {
                 text = "Nanoce original code: MIT License.\n\nTree-sitter runtime 0.25.10: MIT License.\nTree-sitter JSON 0.24.8: MIT License.\nTree-sitter C 0.24.2: MIT License.\nTree-sitter C++ 0.23.4: MIT License.\nTree-sitter Rust 0.24.2: MIT License.\nTree-sitter Python 0.25.0: MIT License.\nTree-sitter Kotlin (fwcd, pinned upstream revision): MIT License.\n\nThird-party components remain subject to their upstream license terms. Full license texts are available from their respective upstream repositories."
                 textSize = 12f
-                setTextColor(0xFFB8C2D0.toInt())
+                setTextColor(getColor(R.color.nanoce_text))
             })
         }
         AlertDialog.Builder(this)
@@ -261,7 +283,13 @@ class MainActivity : Activity() {
             .show()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_EDITOR_SESSION, editorWorkspace.saveSessionSnapshot())
+    }
+
     override fun onDestroy() {
+        if (isFinishing) editorWorkspace.clearSessionSnapshot()
         editorWorkspace.dispose()
         super.onDestroy()
     }
@@ -314,5 +342,6 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_WORKSPACE = 4101
         private const val REQUEST_SAVE_AS = 4102
+        private const val STATE_EDITOR_SESSION = "nanoce.editor.session.saved"
     }
 }
