@@ -109,8 +109,8 @@ int main() {
 
     expect_language(
         tree_sitter_python(),
-        "def main():\\n    return 42\\n",
-        "def main(:\\n    return 42\\n");
+        "def main():\n    return 42\n",
+        "def main(:\n    return 42\n");
 
     expect_language(
         tree_sitter_kotlin(),
@@ -157,7 +157,7 @@ int main() {
         "(comment) @comment [(integer) (float)] @number "
         "[ (true) (false) (none) ] @constant "
         "\"def\" @keyword \"return\" @keyword",
-        "def main():\\n    return 42\\n",
+        "def main():\n    return 42\n",
         "variable,function,keyword,number");
 
     expect_query(tree_sitter_kotlin(),
