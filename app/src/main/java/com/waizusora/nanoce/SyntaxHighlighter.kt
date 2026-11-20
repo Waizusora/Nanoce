@@ -39,7 +39,8 @@ internal object SyntaxHighlighter {
     fun applyTreeSitter(
         text: Spannable,
         language: EditorLanguage,
-        nativeBridge: NativeBridge
+        nativeBridge: NativeBridge,
+        session: Long
     ): Boolean {
         val parserLanguage = when (language) {
             EditorLanguage.JSON -> "json"
@@ -53,7 +54,7 @@ internal object SyntaxHighlighter {
         if (text.isEmpty()) return true
 
         val encoded = runCatching {
-            nativeBridge.nativeSyntaxHighlights(text.toString(), parserLanguage)
+            nativeBridge.nativeUpdateParserSession(session, text.toString())
         }.getOrNull() ?: return false
         if (encoded == "PARSER_ERROR" || encoded == "QUERY_ERROR" ||
             encoded == "UNSUPPORTED_LANGUAGE" || encoded == "INPUT_TOO_LARGE") return false
