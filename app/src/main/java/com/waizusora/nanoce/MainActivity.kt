@@ -44,8 +44,8 @@ class MainActivity : Activity() {
             text = "Nanoce"
             textSize = 23f
             setTextColor(getColor(R.color.nanoce_text))
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 8, 12, 4)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 4)
         }
         val topToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
