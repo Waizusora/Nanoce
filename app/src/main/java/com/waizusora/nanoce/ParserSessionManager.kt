@@ -33,27 +33,27 @@ internal class ParserSessionManager(
         synchronized(lock) {
             if (disposed) return
             val generation = generations[documentKey] ?: 0L
-            // Keep queue order consistent with document lifecycle transitions.
+            // Queue insertion is atomic with the lifecycle generation check.
             execute {
                 if (!isCurrent(documentKey, generation)) return@execute
-            var session = sessions[documentKey]
-            if (session != null && session.language != language) {
-                runCatching { backend.destroy(session.handle) }
-                sessions.remove(documentKey)
-                session = null
-            }
-            if (session == null) {
-                val handle = runCatching { backend.create(language) }.getOrDefault(0L)
-                if (handle == 0L) {
-                    dispatchResult { if (isCurrent(documentKey, generation)) onResult(null) }
-                    return@execute
+                var session = sessions[documentKey]
+                if (session != null && session.language != language) {
+                    runCatching { backend.destroy(session.handle) }
+                    sessions.remove(documentKey)
+                    session = null
                 }
-                session = Session(handle, language)
-                sessions[documentKey] = session
-            }
-            val result = runCatching {
-                backend.update(requireNotNull(session).handle, source)
-            }.getOrNull()
+                if (session == null) {
+                    val handle = runCatching { backend.create(language) }.getOrDefault(0L)
+                    if (handle == 0L) {
+                        dispatchResult { if (isCurrent(documentKey, generation)) onResult(null) }
+                        return@execute
+                    }
+                    session = Session(handle, language)
+                    sessions[documentKey] = session
+                }
+                val result = runCatching {
+                    backend.update(requireNotNull(session).handle, source)
+                }.getOrNull()
                 dispatchResult { if (isCurrent(documentKey, generation)) onResult(result) }
             }
         }
