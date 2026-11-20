@@ -73,6 +73,8 @@ internal class EditorWorkspaceView(
     context: Context,
     private val storage: StorageAccess
 ) : LinearLayout(context) {
+    private val bracketHighlightSpans = mutableListOf<android.text.style.BackgroundColorSpan>()
+
     private val tabs = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -376,7 +378,6 @@ internal class EditorWorkspaceView(
         status.text = "No document open"
     }
 
-    private val bracketHighlightSpans = mutableListOf<android.text.style.BackgroundColorSpan>()
 
     /** Highlights the bracket adjacent to the caret and its matching partner. */
     private fun updateBracketHighlights() {
