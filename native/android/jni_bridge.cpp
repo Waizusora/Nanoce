@@ -227,3 +227,159 @@ Java_com_waizusora_nanoce_NativeBridge_nativeCodeDiagnostics(
     return result;
 }
 
+
+
+namespace {
+
+const char* highlight_query(const std::string& language) {
+    static constexpr char json_query[] = R"query(
+(pair key: (string) @property)
+(string) @string
+(number) @number
+[(null) (true) (false)] @constant
+)query";
+    static constexpr char c_query[] = R"query(
+(identifier) @variable
+(type_identifier) @type
+(primitive_type) @type
+(string_literal) @string
+(comment) @comment
+(number_literal) @number
+"return" @keyword
+"if" @keyword
+"else" @keyword
+"for" @keyword
+"while" @keyword
+"struct" @keyword
+"enum" @keyword
+"typedef" @keyword
+"const" @keyword
+"static" @keyword
+"void" @type
+)query";
+    static constexpr char rust_query[] = R"query(
+(identifier) @variable
+(type_identifier) @type
+(primitive_type) @type
+(string_literal) @string
+(raw_string_literal) @string
+(line_comment) @comment
+(block_comment) @comment
+(integer_literal) @number
+(float_literal) @number
+"fn" @keyword
+"let" @keyword
+"mut" @keyword
+"pub" @keyword
+"impl" @keyword
+"struct" @keyword
+"enum" @keyword
+"trait" @keyword
+"return" @keyword
+"match" @keyword
+"if" @keyword
+"else" @keyword
+"for" @keyword
+"while" @keyword
+"use" @keyword
+)query";
+    if (language == "json") return json_query;
+    if (language == "c" || language == "cpp") return c_query;
+    if (language == "rust") return rust_query;
+    return nullptr;
+}
+
+uint32_t utf16_offset(const std::string& source, uint32_t byte_offset) {
+    const size_t limit = std::min<size_t>(byte_offset, source.size());
+    uint32_t units = 0;
+    for (size_t index = 0; index < limit;) {
+        const unsigned char lead = static_cast<unsigned char>(source[index]);
+        const size_t width = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 :
+                             (lead & 0xF0) == 0xE0 ? 3 : 4;
+        if (index + width > limit) break;
+        units += width == 4 ? 2 : 1;
+        index += width;
+    }
+    return units;
+}
+
+}  // namespace
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_waizusora_nanoce_NativeBridge_nativeSyntaxHighlights(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jstring source,
+    jstring language
+) {
+    if (source == nullptr || language == nullptr) {
+        return env->NewStringUTF("PARSER_ERROR");
+    }
+    const char* language_name = env->GetStringUTFChars(language, nullptr);
+    if (language_name == nullptr) return nullptr;
+    const std::string language_value(language_name);
+    env->ReleaseStringUTFChars(language, language_name);
+
+    const TSLanguage* grammar = nullptr;
+    if (language_value == "json") grammar = tree_sitter_json();
+    else if (language_value == "c") grammar = tree_sitter_c();
+    else if (language_value == "cpp") grammar = tree_sitter_cpp();
+    else if (language_value == "rust") grammar = tree_sitter_rust();
+    const char* query_source = highlight_query(language_value);
+    if (grammar == nullptr || query_source == nullptr) {
+        return env->NewStringUTF("UNSUPPORTED_LANGUAGE");
+    }
+
+    const std::string utf8 = java_string_to_utf8(env, source);
+    if (env->ExceptionCheck()) return nullptr;
+    if (utf8.size() > UINT32_MAX) return env->NewStringUTF("INPUT_TOO_LARGE");
+
+    TSParser* parser = ts_parser_new();
+    if (parser == nullptr) return env->NewStringUTF("PARSER_ERROR");
+    TSTree* tree = ts_parser_set_language(parser, grammar)
+        ? ts_parser_parse_string(parser, nullptr, utf8.data(),
+              static_cast<uint32_t>(utf8.size()))
+        : nullptr;
+    if (tree == nullptr) {
+        ts_parser_delete(parser);
+        return env->NewStringUTF("PARSER_ERROR");
+    }
+
+    uint32_t error_offset = 0;
+    TSQueryError query_error = TSQueryErrorNone;
+    TSQuery* query = ts_query_new(grammar, query_source,
+        static_cast<uint32_t>(std::char_traits<char>::length(query_source)),
+        &error_offset, &query_error);
+    if (query == nullptr) {
+        ts_tree_delete(tree);
+        ts_parser_delete(parser);
+        return env->NewStringUTF("QUERY_ERROR");
+    }
+
+    TSQueryCursor* cursor = ts_query_cursor_new();
+    std::string output;
+    if (cursor != nullptr) {
+        ts_query_cursor_exec(cursor, query, ts_tree_root_node(tree));
+        TSQueryMatch match{};
+        uint32_t capture_index = 0;
+        while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+            const TSQueryCapture& capture = match.captures[capture_index];
+            uint32_t name_length = 0;
+            const char* name = ts_query_capture_name_for_id(
+                query, capture.index, &name_length);
+            const std::string category(name, name_length);
+            const uint32_t start = utf16_offset(
+                utf8, ts_node_start_byte(capture.node));
+            const uint32_t end = utf16_offset(
+                utf8, ts_node_end_byte(capture.node));
+            if (end <= start) continue;
+            output += std::to_string(start) + ":" + std::to_string(end) +
+                      ":" + category + ";";
+        }
+        ts_query_cursor_delete(cursor);
+    }
+    ts_query_delete(query);
+    ts_tree_delete(tree);
+    ts_parser_delete(parser);
+    return env->NewStringUTF(output.c_str());
+}
