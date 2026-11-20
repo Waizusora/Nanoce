@@ -28,7 +28,7 @@ private data class EditorDocument(
 
 private class CursorEditText(
     context: Context,
-    private val onCursorChanged: () -> Unit
+    private val onCursorChanged: (() -> Unit)?
 ) : EditText(context) {
     private val activeLinePaint = android.graphics.Paint().apply {
         color = 0x182F81F7
@@ -38,7 +38,7 @@ private class CursorEditText(
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)
         invalidate()
-        onCursorChanged()
+        onCursorChanged?.invoke()
     }
 
     override fun onDraw(canvas: android.graphics.Canvas) {
