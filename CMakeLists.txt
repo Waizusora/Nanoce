@@ -191,7 +191,7 @@ endif()
 if(NANOCE_BUILD_TESTS AND NOT ANDROID)
     enable_testing()
     add_executable(nanoce_parser_tests native/tests/parser_tests.cpp)
-    target_link_libraries(nanoce_parser_tests PRIVATE tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust) tree-sitter-python tree-sitter-kotlin
+    target_link_libraries(nanoce_parser_tests PRIVATE tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust tree-sitter-python tree-sitter-kotlin)
     add_test(NAME nanoce_parser_tests COMMAND nanoce_parser_tests)
     add_executable(nanoce_core_tests native/tests/core_tests.cpp)
     target_link_libraries(nanoce_core_tests PRIVATE nanoce_core)
