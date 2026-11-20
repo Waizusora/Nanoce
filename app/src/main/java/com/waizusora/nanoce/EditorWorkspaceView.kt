@@ -141,6 +141,7 @@ internal class EditorWorkspaceView(
     private val highlightRevisions = mutableMapOf<Uri, Long>()
     private var pendingHighlight: Runnable? = null
     private var pendingHighlightUri: Uri? = null
+    private var disposed = false
 
     init {
         orientation = VERTICAL
@@ -212,6 +213,15 @@ internal class EditorWorkspaceView(
             override fun afterTextChanged(s: Editable?) = Unit
         })
         showEmptyState()
+    }
+
+    /** Release parser resources when the owning Activity is destroyed. */
+    fun dispose() {
+        if (disposed) return
+        disposed = true
+        cancelPendingHighlight()
+        destroyAllSyntaxSessions()
+        parserExecutor.shutdown()
     }
 
     fun openDocument(uri: Uri, name: String, text: String) {
@@ -443,6 +453,7 @@ internal class EditorWorkspaceView(
     }
 
     private fun updateSyntaxHighlighting() {
+        if (disposed) return
         val language = activeDocument()?.let { EditorLanguage.fromFileName(it.name) }
             ?: EditorLanguage.PLAIN
         val parserLanguage = when (language) {
@@ -486,7 +497,7 @@ internal class EditorWorkspaceView(
                     nativeBridge.nativeUpdateParserSession(handle, source)
                 }.getOrNull()
                 highlightHandler.post {
-                    if (activeUri != uri || highlightRevisions[uri] != revision ||
+                    if (disposed || activeUri != uri || highlightRevisions[uri] != revision ||
                         editor.text.toString() != source) return@post
                     val applied = encoded?.let {
                         SyntaxHighlighter.applyTreeSitterResult(editor.text, it)
