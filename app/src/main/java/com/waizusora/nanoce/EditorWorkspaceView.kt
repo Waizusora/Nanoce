@@ -99,8 +99,9 @@ internal class EditorWorkspaceView(
         typeface = android.graphics.Typeface.MONOSPACE
         gravity = Gravity.TOP or Gravity.END
         setTextColor(context.getColor(R.color.nanoce_muted))
-        setPadding(8, 14, 10, 24)
+        setPadding(dp(8), dp(14), dp(10), dp(24))
         setBackgroundColor(context.getColor(R.color.nanoce_background))
+        setHorizontallyScrolling(true)
         isSingleLine = false
         text = "1"
     }
@@ -166,7 +167,7 @@ internal class EditorWorkspaceView(
             addView(LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 addView(lineNumbers, LinearLayout.LayoutParams(
-                    48, ViewGroup.LayoutParams.WRAP_CONTENT
+                    dp(48), ViewGroup.LayoutParams.WRAP_CONTENT
                 ))
                 addView(editor, LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
@@ -224,34 +225,28 @@ internal class EditorWorkspaceView(
         showEmptyState()
     }
 
-    /** Persist open tabs and unsaved buffers for Activity recreation. */
+    /** Persist open tabs and unsaved buffers through an atomic, versioned snapshot. */
     fun saveSessionSnapshot(): Boolean {
-        val snapshotDocuments = documents.values.toList()
-        if (snapshotDocuments.size > MAX_SNAPSHOT_DOCUMENTS) return false
+        val snapshot = runCatching {
+            SessionSnapshot(
+                activeUri = activeUri?.toString(),
+                selectionStart = editor.selectionStart.coerceAtLeast(0),
+                selectionEnd = editor.selectionEnd.coerceAtLeast(0),
+                documents = documents.values.map { document ->
+                    SessionSnapshotDocument(
+                        document.uri.toString(), document.name, document.text, document.savedText
+                    )
+                }
+            ).let(SessionSnapshotCodec::encode)
+        }.getOrElse { return false }
+
         val file = sessionSnapshotFile()
         var output: java.io.FileOutputStream? = null
         return try {
             val stream = file.startWrite()
             output = stream
-            val data = java.io.DataOutputStream(stream)
-            data.writeInt(SESSION_SNAPSHOT_MAGIC)
-            data.writeInt(snapshotDocuments.size)
-            data.writeUTF(activeUri?.toString().orEmpty())
-            data.writeInt(editor.selectionStart.coerceAtLeast(0))
-            var totalBytes = 0
-            snapshotDocuments.forEach { document ->
-                val textBytes = document.text.toByteArray(Charsets.UTF_8)
-                val savedBytes = document.savedText.toByteArray(Charsets.UTF_8)
-                totalBytes += textBytes.size + savedBytes.size
-                require(totalBytes <= MAX_SNAPSHOT_BYTES)
-                data.writeUTF(document.uri.toString())
-                data.writeUTF(document.name)
-                data.writeInt(textBytes.size)
-                data.write(textBytes)
-                data.writeInt(savedBytes.size)
-                data.write(savedBytes)
-            }
-            data.flush()
+            stream.write(snapshot)
+            stream.flush()
             file.finishWrite(stream)
             output = null
             true
@@ -261,51 +256,49 @@ internal class EditorWorkspaceView(
         }
     }
 
-    /** Restore tabs; native parser handles are recreated lazily for the active document. */
+    /** Restore only a fully validated snapshot; discard corrupt or obsolete payloads. */
     fun restoreSessionSnapshot(): Boolean {
         val file = sessionSnapshotFile()
         if (!file.baseFile.exists()) return false
-        return runCatching {
+        val restored = runCatching {
             file.openRead().use { input ->
-                val data = java.io.DataInputStream(input)
-                require(data.readInt() == SESSION_SNAPSHOT_MAGIC)
-                val count = data.readInt()
-                require(count in 0..MAX_SNAPSHOT_DOCUMENTS)
-                val restoredActive = data.readUTF().takeIf { it.isNotEmpty() }?.let(Uri::parse)
-                val cursor = data.readInt().coerceAtLeast(0)
-                val restored = linkedMapOf<Uri, EditorDocument>()
-                var totalBytes = 0
-                repeat(count) {
-                    val uri = Uri.parse(data.readUTF())
-                    val name = data.readUTF()
-                    val textSize = data.readInt()
-                    require(textSize in 0..MAX_DOCUMENT_BYTES)
-                    val textBytes = ByteArray(textSize)
-                    data.readFully(textBytes)
-                    val savedSize = data.readInt()
-                    require(savedSize in 0..MAX_DOCUMENT_BYTES)
-                    val savedBytes = ByteArray(savedSize)
-                    data.readFully(savedBytes)
-                    totalBytes += textSize + savedSize
-                    require(totalBytes <= MAX_SNAPSHOT_BYTES)
-                    restored[uri] = EditorDocument(uri, name, String(textBytes, Charsets.UTF_8), String(savedBytes, Charsets.UTF_8))
+                val maximum = SessionSnapshotCodec.MAX_TOTAL_BYTES + 1024 * 1024
+                val bytes = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= maximum) { "Snapshot exceeds size limit" }
+                    bytes.write(buffer, 0, count)
                 }
-                documents.clear()
-                documents.putAll(restored)
-                undoHistory.clear()
-                redoHistory.clear()
-                activeUri = restoredActive?.takeIf { it in documents } ?: documents.keys.lastOrNull()
-                renderTabs()
-                val active = activeUri
-                if (active != null) {
-                    activate(active)
-                    editor.setSelection(cursor.coerceAtMost(editor.text.length))
-                } else {
-                    showEmptyState()
-                }
+                SessionSnapshotCodec.decode(bytes.toByteArray())
             }
-            true
-        }.getOrDefault(false)
+        }.getOrElse {
+            file.delete()
+            return false
+        }
+
+        val restoredDocuments = linkedMapOf<Uri, EditorDocument>()
+        restored.documents.forEach { document ->
+            val uri = Uri.parse(document.uri)
+            restoredDocuments[uri] = EditorDocument(uri, document.name, document.text, document.savedText)
+        }
+        documents.clear()
+        documents.putAll(restoredDocuments)
+        undoHistory.clear()
+        redoHistory.clear()
+        activeUri = restored.activeUri?.let(Uri::parse)
+        renderTabs()
+        val active = activeUri
+        if (active != null) {
+            activate(active)
+            editor.setSelection(restored.selectionStart, restored.selectionEnd)
+        } else {
+            showEmptyState()
+        }
+        return true
     }
 
     fun clearSessionSnapshot() { sessionSnapshotFile().delete() }
@@ -736,7 +729,16 @@ internal class EditorWorkspaceView(
     private fun updateLineNumbers() {
         val lineCount = editor.text.count { it == '\n' } + 1
         lineNumbers.text = (1..lineCount).joinToString("\n")
+        val widestNumber = lineNumbers.paint.measureText(lineCount.toString()).toInt()
+        val requiredWidth = widestNumber + lineNumbers.paddingLeft + lineNumbers.paddingRight
+        lineNumbers.layoutParams = lineNumbers.layoutParams.apply {
+            width = maxOf(dp(48), requiredWidth)
+        }
+        lineNumbers.requestLayout()
     }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun updateStatus() {
         val document = activeDocument()
@@ -763,8 +765,5 @@ internal class EditorWorkspaceView(
         private const val MAX_UNDO_STEPS = 200
         private const val SESSION_SNAPSHOT_MAGIC = 0x4E414E43
         private const val SESSION_SNAPSHOT_NAME = "nanoce-editor-session.bin"
-        private const val MAX_SNAPSHOT_DOCUMENTS = 64
-        private const val MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
-        private const val MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
     }
 }
