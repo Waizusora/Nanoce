@@ -6,6 +6,9 @@ internal class NativeBridge {
     external fun nativeJsonDiagnostics(source: String): String
     external fun nativeCodeDiagnostics(source: String, language: String): String
     external fun nativeSyntaxHighlights(source: String, language: String): String
+    external fun nativeCreateParserSession(language: String): Long
+    external fun nativeUpdateParserSession(session: Long, source: String): String
+    external fun nativeDestroyParserSession(session: Long)
 
     companion object {
         init {
