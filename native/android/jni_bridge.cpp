@@ -11,6 +11,7 @@
 extern "C" const TSLanguage* tree_sitter_json();
 extern "C" const TSLanguage* tree_sitter_c();
 extern "C" const TSLanguage* tree_sitter_cpp();
+extern "C" const TSLanguage* tree_sitter_rust();
 
 namespace {
 
@@ -183,6 +184,8 @@ Java_com_waizusora_nanoce_NativeBridge_nativeCodeDiagnostics(
         grammar = tree_sitter_c();
     } else if (std::string(language_name) == "cpp") {
         grammar = tree_sitter_cpp();
+    } else if (std::string(language_name) == "rust") {
+        grammar = tree_sitter_rust();
     } else if (std::string(language_name) == "json") {
         grammar = tree_sitter_json();
     }
