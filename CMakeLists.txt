@@ -124,6 +124,55 @@ include(FetchContent)
         C_STANDARD_REQUIRED ON
     )
 
+
+FetchContent_Declare(
+    tree_sitter_python
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-python.git
+    GIT_TAG v0.25.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(tree_sitter_python)
+if(NOT tree_sitter_python_POPULATED)
+    FetchContent_Populate(tree_sitter_python)
+endif()
+add_library(tree-sitter-python STATIC
+    ${tree_sitter_python_SOURCE_DIR}/src/parser.c
+    ${tree_sitter_python_SOURCE_DIR}/src/scanner.c
+)
+target_include_directories(tree-sitter-python PRIVATE
+    ${tree_sitter_python_SOURCE_DIR}/src
+)
+target_link_libraries(tree-sitter-python PUBLIC tree-sitter)
+set_target_properties(tree-sitter-python PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+)
+
+FetchContent_Declare(
+    tree_sitter_kotlin
+    GIT_REPOSITORY https://github.com/fwcd/tree-sitter-kotlin.git
+    GIT_TAG d6af96d2e23ef0a8ff5ab512864378cf08fba311
+    GIT_SHALLOW FALSE
+)
+FetchContent_GetProperties(tree_sitter_kotlin)
+if(NOT tree_sitter_kotlin_POPULATED)
+    FetchContent_Populate(tree_sitter_kotlin)
+endif()
+add_library(tree-sitter-kotlin STATIC
+    ${tree_sitter_kotlin_SOURCE_DIR}/src/parser.c
+    ${tree_sitter_kotlin_SOURCE_DIR}/src/scanner.c
+)
+target_include_directories(tree-sitter-kotlin PRIVATE
+    ${tree_sitter_kotlin_SOURCE_DIR}/src
+)
+target_link_libraries(tree-sitter-kotlin PUBLIC tree-sitter)
+set_target_properties(tree-sitter-kotlin PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+)
+
 add_library(nanoce_core STATIC
     native/core/src/nanoce.cpp
     native/core/src/filesystem.cpp
@@ -135,7 +184,7 @@ target_compile_features(nanoce_core PUBLIC cxx_std_20)
 if(ANDROID)
     target_compile_definitions(nanoce_core PUBLIC NANOCE_PLATFORM_ANDROID=1)
     add_library(nanoce_android SHARED native/android/jni_bridge.cpp)
-    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust)
+    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust tree-sitter-python tree-sitter-kotlin)
     target_compile_features(nanoce_android PRIVATE cxx_std_20)
 endif()
 
