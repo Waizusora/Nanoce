@@ -36,6 +36,55 @@ internal object SyntaxHighlighter {
     private val slashComment = Regex("//[^\\n]*|/\\*[\\s\\S]*?\\*/")
     private val hashComment = Regex("#[^\\n]*")
 
+    fun applyTreeSitter(
+        text: Spannable,
+        language: EditorLanguage,
+        nativeBridge: NativeBridge
+    ): Boolean {
+        val parserLanguage = when (language) {
+            EditorLanguage.JSON -> "json"
+            EditorLanguage.CPP -> "cpp"
+            EditorLanguage.RUST -> "rust"
+            else -> return false
+        }
+        text.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach(text::removeSpan)
+        if (text.isEmpty()) return true
+
+        val encoded = runCatching {
+            nativeBridge.nativeSyntaxHighlights(text.toString(), parserLanguage)
+        }.getOrNull() ?: return false
+        if (encoded == "PARSER_ERROR" || encoded == "QUERY_ERROR" ||
+            encoded == "UNSUPPORTED_LANGUAGE" || encoded == "INPUT_TOO_LARGE") return false
+
+        val colors = mapOf(
+            "keyword" to KEYWORD,
+            "type" to KEYWORD,
+            "string" to STRING,
+            "comment" to COMMENT,
+            "number" to NUMBER,
+            "constant" to NUMBER,
+            "property" to 0xFF9CDCFE.toInt(),
+            "variable" to 0xFFE6EAF0.toInt()
+        )
+        encoded.split(';').forEach { token ->
+            if (token.isBlank()) return@forEach
+            val fields = token.split(':', limit = 3)
+            if (fields.size != 3) return@forEach
+            val start = fields[0].toIntOrNull() ?: return@forEach
+            val end = fields[1].toIntOrNull() ?: return@forEach
+            val color = colors[fields[2]] ?: return@forEach
+            if (start >= 0 && end > start && end <= text.length) {
+                text.setSpan(
+                    ForegroundColorSpan(color),
+                    start,
+                    end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        return true
+    }
+
     fun apply(text: Spannable, language: EditorLanguage) {
         text.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach(text::removeSpan)
         if (language == EditorLanguage.PLAIN || text.isEmpty()) return
