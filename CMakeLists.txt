@@ -78,6 +78,29 @@ if(ANDROID)
     )
 
     FetchContent_Declare(
+        tree_sitter_rust
+        GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-rust.git
+        GIT_TAG v0.24.2
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_GetProperties(tree_sitter_rust)
+    if(NOT tree_sitter_rust_POPULATED)
+        FetchContent_Populate(tree_sitter_rust)
+    endif()
+    add_library(tree-sitter-rust STATIC
+        ${tree_sitter_rust_SOURCE_DIR}/src/parser.c
+    )
+    target_include_directories(tree-sitter-rust PRIVATE
+        ${tree_sitter_rust_SOURCE_DIR}/src
+    )
+    target_link_libraries(tree-sitter-rust PUBLIC tree-sitter)
+    set_target_properties(tree-sitter-rust PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
+
+    FetchContent_Declare(
         tree_sitter_cpp
         GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
         GIT_TAG v0.23.4
@@ -113,7 +136,7 @@ target_compile_features(nanoce_core PUBLIC cxx_std_20)
 if(ANDROID)
     target_compile_definitions(nanoce_core PUBLIC NANOCE_PLATFORM_ANDROID=1)
     add_library(nanoce_android SHARED native/android/jni_bridge.cpp)
-    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp)
+    target_link_libraries(nanoce_android PRIVATE nanoce_core tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust)
     target_compile_features(nanoce_android PRIVATE cxx_std_20)
 endif()
 
