@@ -56,9 +56,13 @@ internal object SyntaxHighlighter {
         val encoded = runCatching {
             nativeBridge.nativeUpdateParserSession(session, text.toString())
         }.getOrNull() ?: return false
+        return applyTreeSitterResult(text, encoded)
+    }
+
+    fun applyTreeSitterResult(text: Spannable, encoded: String): Boolean {
         if (encoded == "PARSER_ERROR" || encoded == "QUERY_ERROR" ||
             encoded == "UNSUPPORTED_LANGUAGE" || encoded == "INPUT_TOO_LARGE") return false
-
+        text.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach(text::removeSpan)
         val colors = mapOf(
             "keyword" to KEYWORD,
             "type" to KEYWORD,
