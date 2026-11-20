@@ -114,4 +114,26 @@ class ParserSessionManagerTest {
         queue.drain()
         assertTrue(backend.active.isEmpty())
     }
+    @Test fun reopeningClosedDocumentCreatesFreshSessionAfterCloseBarrier() {
+        val queue = QueueExecutor()
+        val backend = FakeBackend()
+        val results = mutableListOf<String?>()
+        val manager = ParserSessionManager(backend, { it() }, queue)
+        manager.request("doc-a", "json", """{"old": true}""") { results.add(it) }
+        queue.drain()
+        val oldHandle = backend.active.single()
+
+        manager.closeDocument("doc-a")
+        manager.request("doc-a", "json", """{"new": true}""") { results.add(it) }
+        queue.drain()
+
+        assertFalse(oldHandle in backend.active)
+        assertEquals(1, backend.active.size)
+        assertEquals(2, backend.updates.size)
+        assertTrue(results.last()?.contains("new") == true)
+        manager.dispose()
+        queue.drain()
+        assertTrue(backend.active.isEmpty())
+    }
+
 }
