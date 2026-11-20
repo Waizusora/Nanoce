@@ -431,7 +431,9 @@ internal class EditorWorkspaceView(
     private fun updateSyntaxHighlighting() {
         val language = activeDocument()?.let { EditorLanguage.fromFileName(it.name) }
             ?: EditorLanguage.PLAIN
-        SyntaxHighlighter.apply(editor.text, language)
+        if (!SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge)) {
+            SyntaxHighlighter.apply(editor.text, language)
+        }
     }
 
     private fun supportsNativeValidation(name: String): Boolean =
