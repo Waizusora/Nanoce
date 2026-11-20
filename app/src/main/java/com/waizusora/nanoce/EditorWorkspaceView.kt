@@ -17,6 +17,11 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 
+private data class ParserSession(
+    val handle: Long,
+    val language: String
+)
+
 private data class EditorDocument(
     val uri: Uri,
     val name: String,
@@ -125,8 +130,7 @@ internal class EditorWorkspaceView(
     private val documents = linkedMapOf<Uri, EditorDocument>()
     private var activeUri: Uri? = null
     private var changingText = false
-    private var syntaxSession: Long = 0L
-    private var syntaxSessionLanguage: String? = null
+    private val syntaxSessions = mutableMapOf<Uri, ParserSession>()
 
     init {
         orientation = VERTICAL
@@ -243,10 +247,7 @@ internal class EditorWorkspaceView(
             .setTitle("Unsaved changes")
             .setMessage("Discard unsaved changes in open documents?")
             .setPositiveButton("Discard") { _, _ ->
-                documents.clear()
-                activeUri = null
-                renderTabs()
-                showEmptyState()
+                closeAllDocuments()
                 action()
             }
             .setNegativeButton("Keep editing", null)
@@ -272,7 +273,7 @@ internal class EditorWorkspaceView(
     }
 
     private fun closeAllDocuments() {
-        destroySyntaxSession()
+        destroyAllSyntaxSessions()
         documents.clear()
         activeUri = null
         renderTabs()
@@ -338,6 +339,7 @@ internal class EditorWorkspaceView(
     private fun requestClose(uri: Uri) {
         val document = documents[uri] ?: return
         val close = {
+            destroySyntaxSession(uri)
             documents.remove(uri)
             if (activeUri == uri) {
                 activeUri = documents.keys.lastOrNull()
@@ -444,29 +446,39 @@ internal class EditorWorkspaceView(
             else -> null
         }
         if (parserLanguage == null) {
-            destroySyntaxSession()
             SyntaxHighlighter.apply(editor.text, language)
             return
         }
-        if (syntaxSessionLanguage != parserLanguage || syntaxSession == 0L) {
-            destroySyntaxSession()
-            syntaxSession = runCatching {
+        val uri = activeUri ?: run {
+            SyntaxHighlighter.apply(editor.text, language)
+            return
+        }
+        var session = syntaxSessions[uri]
+        if (session?.language != parserLanguage) {
+            destroySyntaxSession(uri)
+            val handle = runCatching {
                 nativeBridge.nativeCreateParserSession(parserLanguage)
             }.getOrDefault(0L)
-            syntaxSessionLanguage = if (syntaxSession != 0L) parserLanguage else null
+            if (handle != 0L) {
+                session = ParserSession(handle, parserLanguage)
+                syntaxSessions[uri] = session
+            } else {
+                session = null
+            }
         }
-        if (syntaxSession == 0L ||
-            !SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge, syntaxSession)) {
+        if (session == null ||
+            !SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge, session.handle)) {
             SyntaxHighlighter.apply(editor.text, language)
         }
     }
 
-    private fun destroySyntaxSession() {
-        if (syntaxSession != 0L) {
-            runCatching { nativeBridge.nativeDestroyParserSession(syntaxSession) }
-            syntaxSession = 0L
-        }
-        syntaxSessionLanguage = null
+    private fun destroySyntaxSession(uri: Uri) {
+        val session = syntaxSessions.remove(uri) ?: return
+        runCatching { nativeBridge.nativeDestroyParserSession(session.handle) }
+    }
+
+    private fun destroyAllSyntaxSessions() {
+        syntaxSessions.keys.toList().forEach(::destroySyntaxSession)
     }
 
     private fun supportsNativeValidation(name: String): Boolean =
