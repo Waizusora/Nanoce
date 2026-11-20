@@ -359,7 +359,6 @@ internal class EditorWorkspaceView(
     }
 
     private fun showEmptyState() {
-        destroySyntaxSession()
         changingText = true
         editor.setText("")
         changingText = false
