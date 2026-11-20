@@ -125,21 +125,16 @@ class MainActivity : Activity() {
             addView(footer)
         }
         content.setOnApplyWindowInsetsListener { view, insets ->
-            val topInset: Int
-            val bottomInset: Int
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val systemBars = insets.getInsets(
-                    WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
-                )
-                topInset = systemBars.top
-                bottomInset = systemBars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                run {
-                    topInset = insets.systemWindowInsetTop
-                    bottomInset = insets.systemWindowInsetBottom
+            val (topInset, bottomInset) =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val systemBars = insets.getInsets(
+                        WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
+                    )
+                    systemBars.top to systemBars.bottom
+                } else {
+                    @Suppress("DEPRECATION")
+                    insets.systemWindowInsetTop to insets.systemWindowInsetBottom
                 }
-            }
             view.setPadding(view.paddingLeft, topInset, view.paddingRight, bottomInset)
             insets
         }
