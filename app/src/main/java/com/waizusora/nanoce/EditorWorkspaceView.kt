@@ -448,9 +448,18 @@ internal class EditorWorkspaceView(
             "rs" -> "rust"
             "c", "h" -> "c"
             "cc", "hh", "cpp", "hpp", "cxx", "hxx" -> "cpp"
+            "kt", "kts" -> "kotlin"
+            "py", "pyw" -> "python"
             else -> { toast("No native parser for this file type"); return }
         }
-        val languageLabel = when (language) { "json" -> "JSON"; "c" -> "C"; "rust" -> "Rust"; else -> "C++" }
+        val languageLabel = when (language) {
+            "json" -> "JSON"
+            "c" -> "C"
+            "rust" -> "Rust"
+            "kotlin" -> "Kotlin"
+            "python" -> "Python"
+            else -> "C++"
+        }
         runCatching { nativeBridge.nativeCodeDiagnostics(editor.text.toString(), language) }
             .onSuccess { result ->
                 jsonErrorLine = null
