@@ -12,6 +12,8 @@ extern "C" const TSLanguage* tree_sitter_json();
 extern "C" const TSLanguage* tree_sitter_c();
 extern "C" const TSLanguage* tree_sitter_cpp();
 extern "C" const TSLanguage* tree_sitter_rust();
+extern "C" const TSLanguage* tree_sitter_python();
+extern "C" const TSLanguage* tree_sitter_kotlin();
 
 namespace {
 
@@ -257,6 +259,55 @@ const char* highlight_query(const std::string& language) {
 "static" @keyword
 "void" @type
 )query";
+    static constexpr char python_query[] = R"query(
+(identifier) @variable
+(function_definition name: (identifier) @function)
+(class_definition name: (identifier) @type)
+(string) @string
+(comment) @comment
+[(integer) (float)] @number
+[ (true) (false) (none) ] @constant
+"def" @keyword
+"class" @keyword
+"return" @keyword
+"if" @keyword
+"elif" @keyword
+"else" @keyword
+"for" @keyword
+"while" @keyword
+"import" @keyword
+"from" @keyword
+"async" @keyword
+"await" @keyword
+)query";
+    static constexpr char kotlin_query[] = R"query(
+(simple_identifier) @variable
+(type_identifier) @type
+(function_declaration . (simple_identifier) @function)
+(string_literal) @string
+(character_literal) @string
+(line_comment) @comment
+(multiline_comment) @comment
+[(integer_literal) (long_literal) (hex_literal) (bin_literal) (unsigned_literal) (real_literal)] @number
+[ (boolean_literal) (null_literal) ] @constant
+"fun" @keyword
+"val" @keyword
+"var" @keyword
+"class" @keyword
+"object" @keyword
+"interface" @keyword
+"return" @keyword
+"if" @keyword
+"else" @keyword
+"when" @keyword
+"for" @keyword
+"while" @keyword
+"try" @keyword
+"catch" @keyword
+"throw" @keyword
+"package" @keyword
+"import" @keyword
+)query";
     static constexpr char rust_query[] = R"query(
 (identifier) @variable
 (type_identifier) @type
@@ -286,6 +337,8 @@ const char* highlight_query(const std::string& language) {
     if (language == "json") return json_query;
     if (language == "c" || language == "cpp") return c_query;
     if (language == "rust") return rust_query;
+    if (language == "python") return python_query;
+    if (language == "kotlin") return kotlin_query;
     return nullptr;
 }
 
@@ -325,6 +378,8 @@ Java_com_waizusora_nanoce_NativeBridge_nativeSyntaxHighlights(
     else if (language_value == "c") grammar = tree_sitter_c();
     else if (language_value == "cpp") grammar = tree_sitter_cpp();
     else if (language_value == "rust") grammar = tree_sitter_rust();
+    else if (language_value == "python") grammar = tree_sitter_python();
+    else if (language_value == "kotlin") grammar = tree_sitter_kotlin();
     const char* query_source = highlight_query(language_value);
     if (grammar == nullptr || query_source == nullptr) {
         return env->NewStringUTF("UNSUPPORTED_LANGUAGE");
