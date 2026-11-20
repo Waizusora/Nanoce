@@ -5,8 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 option(NANOCE_BUILD_TESTS "Build Nanoce native tests" ON)
 
-if(ANDROID)
-    include(FetchContent)
+include(FetchContent)
     FetchContent_Declare(
         tree_sitter
         GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
@@ -124,7 +123,6 @@ if(ANDROID)
         C_STANDARD 11
         C_STANDARD_REQUIRED ON
     )
-endif()
 
 add_library(nanoce_core STATIC
     native/core/src/nanoce.cpp
@@ -143,6 +141,9 @@ endif()
 
 if(NANOCE_BUILD_TESTS AND NOT ANDROID)
     enable_testing()
+    add_executable(nanoce_parser_tests native/tests/parser_tests.cpp)
+    target_link_libraries(nanoce_parser_tests PRIVATE tree-sitter tree-sitter-json tree-sitter-c tree-sitter-cpp tree-sitter-rust)
+    add_test(NAME nanoce_parser_tests COMMAND nanoce_parser_tests)
     add_executable(nanoce_core_tests native/tests/core_tests.cpp)
     target_link_libraries(nanoce_core_tests PRIVATE nanoce_core)
     add_test(NAME nanoce_core_tests COMMAND nanoce_core_tests)
