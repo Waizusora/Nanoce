@@ -30,12 +30,12 @@ internal class ParserSessionManager(
     private var disposed = false
 
     fun request(documentKey: String, language: String, source: String, onResult: (String?) -> Unit) {
-        val generation = synchronized(lock) {
+        synchronized(lock) {
             if (disposed) return
-            generations[documentKey] ?: 0L
-        }
-        execute {
-            if (!isCurrent(documentKey, generation)) return@execute
+            val generation = generations[documentKey] ?: 0L
+            // Keep queue order consistent with document lifecycle transitions.
+            execute {
+                if (!isCurrent(documentKey, generation)) return@execute
             var session = sessions[documentKey]
             if (session != null && session.language != language) {
                 runCatching { backend.destroy(session.handle) }
@@ -54,7 +54,8 @@ internal class ParserSessionManager(
             val result = runCatching {
                 backend.update(requireNotNull(session).handle, source)
             }.getOrNull()
-            dispatchResult { if (isCurrent(documentKey, generation)) onResult(result) }
+                dispatchResult { if (isCurrent(documentKey, generation)) onResult(result) }
+            }
         }
     }
 
@@ -63,10 +64,10 @@ internal class ParserSessionManager(
         synchronized(lock) {
             if (disposed) return
             generations[documentKey] = (generations[documentKey] ?: 0L) + 1L
-        }
-        execute {
-            sessions.remove(documentKey)?.let { session ->
-                runCatching { backend.destroy(session.handle) }
+            execute {
+                sessions.remove(documentKey)?.let { session ->
+                    runCatching { backend.destroy(session.handle) }
+                }
             }
         }
     }
@@ -75,10 +76,10 @@ internal class ParserSessionManager(
         synchronized(lock) {
             if (disposed) return
             documentKeys.forEach { key -> generations[key] = (generations[key] ?: 0L) + 1L }
-        }
-        execute {
-            sessions.values.forEach { session -> runCatching { backend.destroy(session.handle) } }
-            sessions.clear()
+            execute {
+                sessions.values.forEach { session -> runCatching { backend.destroy(session.handle) } }
+                sessions.clear()
+            }
         }
     }
 
@@ -88,10 +89,10 @@ internal class ParserSessionManager(
             if (disposed) return
             disposed = true
             generations.keys.toList().forEach { key -> generations[key] = (generations[key] ?: 0L) + 1L }
-        }
-        execute(force = true) {
-            sessions.values.forEach { session -> runCatching { backend.destroy(session.handle) } }
-            sessions.clear()
+            execute(force = true) {
+                sessions.values.forEach { session -> runCatching { backend.destroy(session.handle) } }
+                sessions.clear()
+            }
         }
         ownedWorker?.shutdown()
     }
