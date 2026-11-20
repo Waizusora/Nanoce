@@ -225,23 +225,23 @@ int main() {
 
 
     expect_incremental_equivalent(tree_sitter_python(), {
-        "def main():\\n    return 42\\n",
-        "def main():\\n    value = 7\\n    return value\\n",
-        "def main():\\n    value = 7\\n    return value + 1\\n",
-        "def main():\\n    return 8\\n"
+        "def main():\n    return 42\n",
+        "def main():\n    value = 7\n    return value\n",
+        "def main():\n    value = 7\n    return value + 1\n",
+        "def main():\n    return 8\n"
     });
     expect_incremental_equivalent(tree_sitter_rust(), {
         "fn main() { let value = 1; }",
         "fn main() { let value = 2; }",
-        "fn main() {\\n    let café = 2;\\n    println!(\\"{}\\", café);\\n}",
-        "fn main() {\\n    let café = 20;\\n    println!(\\"{}\\", café);\\n}",
-        "fn main() {\\n    println!(\\"done\\");\\n}"
+        "fn main() {\n    let café = 2;\n    println!(\"{}\", café);\n}",
+        "fn main() {\n    let café = 20;\n    println!(\"{}\", café);\n}",
+        "fn main() {\n    println!(\"done\");\n}"
     });
     expect_incremental_equivalent(tree_sitter_kotlin(), {
         "fun main() { val value = 1 }",
         "fun main() { val value = 12 }",
-        "fun main() {\\n    val label = \\"編輯器\\"\\n    println(label)\\n}",
-        "fun main() {\\n    println(\\"ready\\")\\n}"
+        "fun main() {\n    val label = \"編輯器\"\n    println(label)\n}",
+        "fun main() {\n    println(\"ready\")\n}"
     });
 
     return 0;
