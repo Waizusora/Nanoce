@@ -190,6 +190,10 @@ Java_com_waizusora_nanoce_NativeBridge_nativeCodeDiagnostics(
         grammar = tree_sitter_rust();
     } else if (std::string(language_name) == "json") {
         grammar = tree_sitter_json();
+    } else if (std::string(language_name) == "python") {
+        grammar = tree_sitter_python();
+    } else if (std::string(language_name) == "kotlin") {
+        grammar = tree_sitter_kotlin();
     }
     env->ReleaseStringUTFChars(language, language_name);
 
