@@ -138,9 +138,7 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             setOnClickListener { action() }
-            background = obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
-                .getDrawable(0)
-                .also { obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground)).recycle() }
+            setBackgroundResource(android.R.drawable.list_selector_background)
         }
 
     private fun separator(): View = View(this).apply {
@@ -259,7 +257,9 @@ class MainActivity : Activity() {
                 }
             }
             REQUEST_SAVE_AS -> {
-                val name = data?.data?.lastPathSegment?.substringAfterLast('/') ?: "untitled.txt"
+                val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                    ?: "untitled.txt"
                 editorWorkspace.saveAs(uri, name)
             }
         }
