@@ -150,9 +150,7 @@ class MainActivity : Activity() {
         }
         window.decorView.systemUiVisibility = 0
         content.requestApplyInsets()
-        if (savedInstanceState?.getBoolean(STATE_EDITOR_SESSION) == true &&
-            editorWorkspace.restoreSessionSnapshot()
-        ) {
+        if (editorWorkspace.restoreSessionSnapshot()) {
             welcome.visibility = View.GONE
             explorer.visibility = View.GONE
             editorWorkspace.visibility = View.VISIBLE
@@ -292,6 +290,11 @@ class MainActivity : Activity() {
             .setView(ScrollView(this).apply { addView(panel) })
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    override fun onPause() {
+        editorWorkspace.saveSessionSnapshot()
+        super.onPause()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
