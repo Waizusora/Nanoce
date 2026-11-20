@@ -133,6 +133,8 @@ internal class EditorWorkspaceView(
     private var jsonErrorLine: Int? = null
     private var jsonErrorColumn: Int? = null
     private val documents = linkedMapOf<Uri, EditorDocument>()
+    private val undoHistory = mutableMapOf<Uri, MutableList<String>>()
+    private val redoHistory = mutableMapOf<Uri, MutableList<String>>()
     private var activeUri: Uri? = null
     private var changingText = false
     private val syntaxSessions = mutableMapOf<Uri, ParserSession>()
@@ -199,7 +201,14 @@ internal class EditorWorkspaceView(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (changingText) return
                 val document = activeDocument() ?: return
-                document.text = s?.toString().orEmpty()
+                val updatedText = s?.toString().orEmpty()
+                if (document.text != updatedText) {
+                    val history = undoHistory.getOrPut(document.uri) { mutableListOf() }
+                    history.add(document.text)
+                    if (history.size > MAX_UNDO_STEPS) history.removeAt(0)
+                    redoHistory[document.uri]?.clear()
+                    document.text = updatedText
+                }
                 jsonDiagnostic = null
                 jsonErrorLine = null
                 jsonErrorColumn = null
@@ -256,6 +265,63 @@ internal class EditorWorkspaceView(
         }
     }
 
+    fun saveAs(uri: Uri, name: String) {
+        val source = activeDocument() ?: run {
+            toast("No document is open")
+            return
+        }
+        val content = source.text
+        runCatching {
+            storage.openOutput(uri)?.use { output ->
+                output.write(content.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: throw IllegalStateException("Provider returned no output stream")
+        }.onSuccess {
+            documents[uri] = EditorDocument(uri, name, content, content)
+            undoHistory[uri] = mutableListOf()
+            redoHistory[uri] = mutableListOf()
+            activate(uri)
+            toast("Saved as $name")
+        }.onFailure {
+            toast("Save as failed: ${it.message ?: "write error"}")
+        }
+    }
+
+    fun undo() {
+        val document = activeDocument() ?: return
+        val history = undoHistory[document.uri] ?: return
+        if (history.isEmpty()) {
+            toast("Nothing to undo")
+            return
+        }
+        redoHistory.getOrPut(document.uri) { mutableListOf() }.add(document.text)
+        restoreText(document, history.removeAt(history.lastIndex))
+    }
+
+    fun redo() {
+        val document = activeDocument() ?: return
+        val history = redoHistory[document.uri] ?: return
+        if (history.isEmpty()) {
+            toast("Nothing to redo")
+            return
+        }
+        undoHistory.getOrPut(document.uri) { mutableListOf() }.add(document.text)
+        restoreText(document, history.removeAt(history.lastIndex))
+    }
+
+    private fun restoreText(document: EditorDocument, value: String) {
+        changingText = true
+        editor.setText(value)
+        editor.setSelection(editor.text.length)
+        document.text = value
+        changingText = false
+        updateLineNumbers()
+        updateSyntaxHighlighting()
+        updateStatus()
+        updateBracketHighlights()
+        renderTabs()
+    }
+
     fun hasUnsavedChanges(): Boolean = documents.values.any { it.isDirty }
 
     fun confirmDiscardAndRun(action: () -> Unit) {
@@ -295,6 +361,8 @@ internal class EditorWorkspaceView(
     private fun closeAllDocuments() {
         destroyAllSyntaxSessions()
         documents.clear()
+        undoHistory.clear()
+        redoHistory.clear()
         activeUri = null
         renderTabs()
         showEmptyState()
@@ -303,6 +371,8 @@ internal class EditorWorkspaceView(
     private fun activate(uri: Uri) {
         val document = documents[uri] ?: return
         activeUri = uri
+        undoHistory.getOrPut(uri) { mutableListOf() }
+        redoHistory.getOrPut(uri) { mutableListOf() }
         jsonDiagnostic = null
         jsonErrorLine = null
         jsonErrorColumn = null
@@ -627,4 +697,8 @@ internal class EditorWorkspaceView(
 
     private fun toast(message: String) =
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+
+    companion object {
+        private const val MAX_UNDO_STEPS = 200
+    }
 }
