@@ -47,8 +47,11 @@ colored_symbol = foreground_paths[0]
 mono_symbol = monochrome_paths[0]
 require(colored_symbol.get(ANDROID + "pathData") == mono_symbol.get(ANDROID + "pathData"),
         "Monochrome symbol geometry must match the colored foreground")
-require(colored_symbol.get(ANDROID + "strokeColor") == "#42C8F5",
-        "Colored foreground must preserve the Nanoce cyan symbol")
+require(colored_symbol.get(ANDROID + "strokeColor") == "#FFFFFFFF",
+        "Launcher foreground must use a white symbol")
+require(colored_symbol.get(ANDROID + "pathData") ==
+        "M40,34 L22,54 L40,74 M68,34 L86,54 L68,74",
+        "Launcher foreground must be the centered angle-bracket mark")
 require(mono_symbol.get(ANDROID + "strokeColor") == "#FFFFFFFF",
         "Monochrome symbol must be opaque white for launcher tinting")
 
@@ -56,10 +59,10 @@ for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
     legacy = parse(f"app/src/main/res/mipmap-anydpi/{name}")
     require(legacy.tag == "vector", f"Pre-adaptive {name} must be a vector fallback")
     paths = legacy.findall("path")
-    require(any(p.get(ANDROID + "fillColor") == "#151922" for p in paths),
-            f"Legacy {name} must retain the navy background")
-    require(any(p.get(ANDROID + "strokeColor") == "#42C8F5" for p in paths),
-            f"Legacy {name} must retain the cyan symbol")
+    require(any(p.get(ANDROID + "fillColor") == "#000000" for p in paths),
+            f"Legacy {name} must use a black background")
+    require(any(p.get(ANDROID + "strokeColor") == "#FFFFFFFF" for p in paths),
+            f"Legacy {name} must use a white symbol")
 
 for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
     adaptive = parse(f"app/src/main/res/mipmap-anydpi-v26/{name}")
@@ -81,7 +84,7 @@ for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
 colors = parse("app/src/main/res/values/colors.xml")
 background = next((item for item in colors.findall("color")
                    if item.get("name") == "launcher_background"), None)
-require(background is not None and (background.text or "").strip().upper() == "#151922",
-        "launcher_background must remain #151922")
+require(background is not None and (background.text or "").strip().upper() == "#000000",
+        "launcher_background must be pure black")
 
 print("Launcher resource contract passed (legacy, adaptive, and monochrome variants).")
