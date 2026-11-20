@@ -125,6 +125,8 @@ internal class EditorWorkspaceView(
     private val documents = linkedMapOf<Uri, EditorDocument>()
     private var activeUri: Uri? = null
     private var changingText = false
+    private var syntaxSession: Long = 0L
+    private var syntaxSessionLanguage: String? = null
 
     init {
         orientation = VERTICAL
@@ -270,6 +272,7 @@ internal class EditorWorkspaceView(
     }
 
     private fun closeAllDocuments() {
+        destroySyntaxSession()
         documents.clear()
         activeUri = null
         renderTabs()
@@ -354,6 +357,7 @@ internal class EditorWorkspaceView(
     }
 
     private fun showEmptyState() {
+        destroySyntaxSession()
         changingText = true
         editor.setText("")
         changingText = false
@@ -431,9 +435,38 @@ internal class EditorWorkspaceView(
     private fun updateSyntaxHighlighting() {
         val language = activeDocument()?.let { EditorLanguage.fromFileName(it.name) }
             ?: EditorLanguage.PLAIN
-        if (!SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge)) {
+        val parserLanguage = when (language) {
+            EditorLanguage.JSON -> "json"
+            EditorLanguage.CPP -> "cpp"
+            EditorLanguage.RUST -> "rust"
+            EditorLanguage.KOTLIN -> "kotlin"
+            EditorLanguage.PYTHON -> "python"
+            else -> null
+        }
+        if (parserLanguage == null) {
+            destroySyntaxSession()
+            SyntaxHighlighter.apply(editor.text, language)
+            return
+        }
+        if (syntaxSessionLanguage != parserLanguage || syntaxSession == 0L) {
+            destroySyntaxSession()
+            syntaxSession = runCatching {
+                nativeBridge.nativeCreateParserSession(parserLanguage)
+            }.getOrDefault(0L)
+            syntaxSessionLanguage = if (syntaxSession != 0L) parserLanguage else null
+        }
+        if (syntaxSession == 0L ||
+            !SyntaxHighlighter.applyTreeSitter(editor.text, language, nativeBridge, syntaxSession)) {
             SyntaxHighlighter.apply(editor.text, language)
         }
+    }
+
+    private fun destroySyntaxSession() {
+        if (syntaxSession != 0L) {
+            runCatching { nativeBridge.nativeDestroyParserSession(syntaxSession) }
+            syntaxSession = 0L
+        }
+        syntaxSessionLanguage = null
     }
 
     private fun supportsNativeValidation(name: String): Boolean =
