@@ -168,6 +168,10 @@ class MainActivity : Activity() {
     }
 
     private fun openWorkspacePicker() {
+        editorWorkspace.confirmCloseAllAndRun { launchWorkspacePicker() }
+    }
+
+    private fun launchWorkspacePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -216,7 +220,7 @@ class MainActivity : Activity() {
                 setPadding(0, 14, 0, 8)
             })
             addView(TextView(this@MainActivity).apply {
-                text = "Nanoce original code is licensed under the MIT License.\n\nTree-sitter is distributed under the MIT License. Grammar sources retain their respective upstream licenses. See the bundled source and license files for complete third-party notices."
+                text = "Nanoce original code: MIT License.\n\nTree-sitter runtime 0.25.10: MIT License.\nTree-sitter JSON 0.24.8: MIT License.\nTree-sitter C 0.24.2: MIT License.\nTree-sitter C++ 0.23.4: MIT License.\nTree-sitter Rust 0.24.2: MIT License.\nTree-sitter Python 0.25.0: MIT License.\nTree-sitter Kotlin (fwcd, pinned upstream revision): MIT License.\n\nThird-party components remain subject to their upstream license terms. Full license texts are available from their respective upstream repositories."
                 textSize = 12f
                 setTextColor(0xFFB8C2D0.toInt())
             })
