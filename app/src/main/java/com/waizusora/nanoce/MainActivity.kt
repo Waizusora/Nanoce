@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.view.WindowInsets
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -47,10 +49,10 @@ class MainActivity : Activity() {
         val topToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(iconButton("☰", "Files") { toggleFiles() })
-            addView(iconButton("▱", "Open project") { openWorkspacePicker() })
-            addView(iconButton("+", "New file or folder") { createProjectItem() })
-            addView(iconButton("⟳", "Refresh files") { explorer.refresh() })
+            addToolbarAction(this, "☰", "Files") { toggleFiles() }
+            addToolbarAction(this, "▱", "Open project") { openWorkspacePicker() }
+            addToolbarAction(this, "+", "New file or folder") { createProjectItem() }
+            addToolbarAction(this, "⟳", "Refresh files") { explorer.refresh() }
         }
 
         workspaceBody = FrameLayout(this).apply {
@@ -89,11 +91,11 @@ class MainActivity : Activity() {
         val bottomToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addView(iconButton("▣", "Save") { editorWorkspace.saveActive() })
-            addView(iconButton("⇧", "Save as") { launchSaveAs() })
-            addView(iconButton("↶", "Undo") { editorWorkspace.undo() })
-            addView(iconButton("↷", "Redo") { editorWorkspace.redo() })
-            addView(iconButton("ⓘ", "About") { showAbout() })
+            addToolbarAction(this, "▣", "Save") { editorWorkspace.saveActive() }
+            addToolbarAction(this, "⇧", "Save as") { launchSaveAs() }
+            addToolbarAction(this, "↶", "Undo") { editorWorkspace.undo() }
+            addToolbarAction(this, "↷", "Redo") { editorWorkspace.redo() }
+            addToolbarAction(this, "ⓘ", "About") { showAbout() }
         }
 
         val header = LinearLayout(this).apply {
@@ -101,7 +103,7 @@ class MainActivity : Activity() {
             setBackgroundColor(0xFF151922.toInt())
             addView(title)
             addView(topToolbar, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 48
+                ViewGroup.LayoutParams.MATCH_PARENT, 64
             ))
             addView(separator())
         }
@@ -110,7 +112,7 @@ class MainActivity : Activity() {
             setBackgroundColor(0xFF151922.toInt())
             addView(separator())
             addView(bottomToolbar, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 52
+                ViewGroup.LayoutParams.MATCH_PARENT, 64
             ))
         }
         val content = LinearLayout(this).apply {
@@ -122,19 +124,51 @@ class MainActivity : Activity() {
             ))
             addView(footer)
         }
+        content.setOnApplyWindowInsetsListener { view, insets ->
+            val topInset: Int
+            val bottomInset: Int
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val systemBars = insets.getInsets(
+                    WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
+                )
+                topInset = systemBars.top
+                bottomInset = systemBars.bottom
+            } else {
+                @Suppress("DEPRECATION")
+                run {
+                    topInset = insets.systemWindowInsetTop
+                    bottomInset = insets.systemWindowInsetBottom
+                }
+            }
+            view.setPadding(view.paddingLeft, topInset, view.paddingRight, bottomInset)
+            insets
+        }
         setContentView(content)
+        content.requestApplyInsets()
+    }
+
+    private fun addToolbarAction(
+        toolbar: LinearLayout,
+        symbol: String,
+        label: String,
+        action: () -> Unit
+    ) {
+        toolbar.addView(
+            iconButton(symbol, label, action),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        )
     }
 
     private fun iconButton(symbol: String, label: String, action: () -> Unit): TextView =
         TextView(this).apply {
             text = symbol
             contentDescription = label
-            textSize = 23f
+            textSize = 27f
             gravity = Gravity.CENTER
             setTextColor(0xFFD6DEE9.toInt())
-            setPadding(8, 4, 8, 4)
-            minWidth = 52
-            minHeight = 48
+            setPadding(4, 4, 4, 4)
+            minWidth = 56
+            minHeight = 56
             isClickable = true
             isFocusable = true
             setOnClickListener { action() }
