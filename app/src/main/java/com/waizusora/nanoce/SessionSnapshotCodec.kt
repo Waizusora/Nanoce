@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 
 internal data class SessionSnapshotDocument(
     val uri: String,
@@ -26,6 +28,8 @@ internal object SessionSnapshotCodec {
     const val MAX_DOCUMENTS = 64
     const val MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
     const val MAX_TOTAL_BYTES = 16 * 1024 * 1024
+    private const val MAX_URI_CHARS = 4096
+    private const val MAX_NAME_CHARS = 1024
 
     fun encode(snapshot: SessionSnapshot): ByteArray {
         require(snapshot.documents.size <= MAX_DOCUMENTS)
@@ -34,6 +38,7 @@ internal object SessionSnapshotCodec {
         var totalBytes = 0L
         snapshot.documents.forEach { document ->
             require(document.uri.isNotBlank() && document.name.isNotBlank())
+            require(document.uri.length <= MAX_URI_CHARS && document.name.length <= MAX_NAME_CHARS)
             require(seen.add(document.uri)) { "Duplicate document URI" }
             val textSize = document.text.toByteArray(Charsets.UTF_8).size
             val savedSize = document.savedText.toByteArray(Charsets.UTF_8).size
@@ -68,6 +73,13 @@ internal object SessionSnapshotCodec {
         return bytes.toByteArray()
     }
 
+    private fun decodeUtf8(bytes: ByteArray): String =
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+
     fun decode(bytes: ByteArray): SessionSnapshot {
         require(bytes.size <= MAX_TOTAL_BYTES + 1024 * 1024) { "Snapshot exceeds size limit" }
         DataInputStream(ByteArrayInputStream(bytes)).use { input ->
@@ -86,6 +98,9 @@ internal object SessionSnapshotCodec {
                 val uri = input.readUTF()
                 val name = input.readUTF()
                 require(uri.isNotBlank() && name.isNotBlank()) { "Invalid document identity" }
+                require(uri.length <= MAX_URI_CHARS && name.length <= MAX_NAME_CHARS) {
+                    "Document identity exceeds size limit"
+                }
                 require(seen.add(uri)) { "Duplicate document URI" }
                 val textSize = input.readInt()
                 require(textSize in 0..MAX_DOCUMENT_BYTES) { "Invalid document buffer size" }
@@ -100,7 +115,7 @@ internal object SessionSnapshotCodec {
                 val savedBytes = ByteArray(savedSize)
                 input.readFully(savedBytes)
                 documents += SessionSnapshotDocument(
-                    uri, name, String(textBytes, Charsets.UTF_8), String(savedBytes, Charsets.UTF_8)
+                    uri, name, decodeUtf8(textBytes), decodeUtf8(savedBytes)
                 )
             }
             require(input.read() == -1) { "Unexpected trailing snapshot data" }
