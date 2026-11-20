@@ -11,6 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -49,10 +50,10 @@ class MainActivity : Activity() {
         val topToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addToolbarAction(this, "☰", "Files") { toggleFiles() }
-            addToolbarAction(this, "▱", "Open project") { openWorkspacePicker() }
-            addToolbarAction(this, "+", "New file or folder") { createProjectItem() }
-            addToolbarAction(this, "⟳", "Refresh files") { explorer.refresh() }
+            addToolbarAction(this, R.drawable.ic_toolbar_files, "Files") { toggleFiles() }
+            addToolbarAction(this, R.drawable.ic_toolbar_open, "Open") { openWorkspacePicker() }
+            addToolbarAction(this, R.drawable.ic_toolbar_new, "New") { createProjectItem() }
+            addToolbarAction(this, R.drawable.ic_toolbar_refresh, "Refresh") { explorer.refresh() }
         }
 
         workspaceBody = FrameLayout(this).apply {
@@ -91,21 +92,21 @@ class MainActivity : Activity() {
         val bottomToolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addToolbarAction(this, "▣", "Save") { editorWorkspace.saveActive() }
-            addToolbarAction(this, "⇧", "Save as") { launchSaveAs() }
-            addToolbarAction(this, "↶", "Undo") { editorWorkspace.undo() }
-            addToolbarAction(this, "↷", "Redo") { editorWorkspace.redo() }
-            addToolbarAction(this, "ⓘ", "About") { showAbout() }
+            addToolbarAction(this, R.drawable.ic_toolbar_save, "Save") { editorWorkspace.saveActive() }
+            addToolbarAction(this, R.drawable.ic_toolbar_save_as, "Save As") { launchSaveAs() }
+            addToolbarAction(this, R.drawable.ic_toolbar_undo, "Undo") { editorWorkspace.undo() }
+            addToolbarAction(this, R.drawable.ic_toolbar_redo, "Redo") { editorWorkspace.redo() }
+            addToolbarAction(this, R.drawable.ic_toolbar_about, "About") { showAbout() }
         }
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.nanoce_background))
             addView(title, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 44
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44)
             ))
             addView(topToolbar, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 56
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(60)
             ))
             addView(separator())
         }
@@ -114,7 +115,7 @@ class MainActivity : Activity() {
             setBackgroundColor(getColor(R.color.nanoce_background))
             addView(separator())
             addView(bottomToolbar, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 64
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(70)
             ))
         }
         val content = LinearLayout(this).apply {
@@ -160,7 +161,7 @@ class MainActivity : Activity() {
 
     private fun addToolbarAction(
         toolbar: LinearLayout,
-        symbol: String,
+        iconRes: Int,
         label: String,
         action: () -> Unit
     ) {
@@ -170,27 +171,37 @@ class MainActivity : Activity() {
             contentDescription = label
             isClickable = true
             isFocusable = true
-            setPadding(3, 3, 3, 3)
+            minimumWidth = dp(48)
+            minimumHeight = dp(48)
+            setPadding(dp(2), dp(3), dp(2), dp(3))
             setBackgroundResource(R.drawable.toolbar_action_background)
-            addView(TextView(this@MainActivity).apply {
-                text = symbol
-                textSize = 21f
-                gravity = Gravity.CENTER
-                setTextColor(getColor(R.color.nanoce_text))
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 0, 1f))
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(iconRes)
+                imageTintList = android.content.res.ColorStateList.valueOf(
+                    getColor(R.color.nanoce_text)
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = null
+            }, LinearLayout.LayoutParams(dp(24), dp(24)))
             addView(TextView(this@MainActivity).apply {
                 text = label
-                textSize = 10f
+                textSize = 11f
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setTextColor(getColor(R.color.nanoce_muted))
-            })
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(2) })
             setOnClickListener { action() }
         }
         toolbar.addView(item, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
         ))
     }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun separator(): View = View(this).apply {
         setBackgroundColor(getColor(R.color.nanoce_divider))
