@@ -68,7 +68,7 @@ class SessionSnapshotCodecTest {
         val encoded = SessionSnapshotCodec.encode(
             SessionSnapshot("doc", 0, 0, listOf(SessionSnapshotDocument("doc", "a.txt", "hello", "")))
         )
-        val payloadOffset = encoded.indexOf(byteArrayOf(0x68, 0x65, 0x6c, 0x6c, 0x6f))
+        val payloadOffset = encoded.toList().windowed(5).indexOf(listOf(0x68, 0x65, 0x6c, 0x6c, 0x6f))
         check(payloadOffset >= 0)
         encoded[payloadOffset] = 0xC3.toByte()
         assertThrows(Exception::class.java) {
