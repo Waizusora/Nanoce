@@ -12,7 +12,7 @@ class SessionSnapshotCodecTest {
             selectionEnd = 9,
             documents = listOf(
                 SessionSnapshotDocument("content://provider/document/one", "one.rs", "fn main() {}", "fn main()"),
-                SessionSnapshotDocument("content://provider/document/two", "two.json", "{\\n  \\"ok\\": true\\n}", "{\\n}")
+                SessionSnapshotDocument("content://provider/document/two", "two.json", "{\n  \"ok\": true\n}", "{\n}")
             )
         )
         assertEquals(expected, SessionSnapshotCodec.decode(SessionSnapshotCodec.encode(expected)))
