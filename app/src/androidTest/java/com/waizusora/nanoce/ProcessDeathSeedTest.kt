@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.util.AtomicFile
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -14,7 +13,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ProcessDeathSeedTest {
     private val context: Context
-        get() = ApplicationProvider.getApplicationContext()
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun persistEditorSessionAndMoveAppToBackground() {
