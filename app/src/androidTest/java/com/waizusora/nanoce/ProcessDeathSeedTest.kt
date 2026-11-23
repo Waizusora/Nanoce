@@ -2,6 +2,7 @@ package com.waizusora.nanoce
 
 import android.content.Context
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -21,6 +22,7 @@ class ProcessDeathSeedTest {
         val activityName = MainActivity::class.java.name
         executeShell("am start -W -n $packageName/$activityName")
         executeShell("input keyevent KEYCODE_HOME")
+        awaitHomeResumed(packageName)
 
         // MainActivity.onPause() persists its current session. Seed the fixture
         // only after it has gone to the background so the empty session cannot
@@ -35,6 +37,18 @@ class ProcessDeathSeedTest {
             snapshotFile.failWrite(output)
             throw error
         }
+    }
+
+    private fun awaitHomeResumed(packageName: String) {
+        repeat(50) {
+            val activityDump = executeShell("dumpsys activity activities")
+            val resumedLine = activityDump.lineSequence().firstOrNull {
+                it.contains("mResumedActivity") || it.contains("topResumedActivity")
+            }
+            if (resumedLine != null && !resumedLine.contains(packageName)) return
+            SystemClock.sleep(100)
+        }
+        throw AssertionError("Home did not become the resumed activity before seeding snapshot")
     }
 
     private fun executeShell(command: String): String {
