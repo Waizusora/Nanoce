@@ -7,7 +7,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
-import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ProcessDeathRecoveryTest {
     private val context: Context
-        get() = ApplicationProvider.getApplicationContext()
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun forceStoppedProcessRestoresPersistedEditorSessionOnNextLaunch() {
@@ -27,6 +27,11 @@ class ProcessDeathRecoveryTest {
         val expected = processDeathSnapshot()
 
         try {
+            val seeded = snapshotFile.openRead().use { input ->
+                SessionSnapshotCodec.decode(input.readBytes())
+            }
+            assertEquals("Process-death fixture must exist before launch", expected, seeded)
+
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
                     val editor = findEditTexts(activity.window.decorView).singleOrNull()
