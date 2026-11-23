@@ -5,6 +5,7 @@ import android.os.ParcelFileDescriptor
 import android.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Test
 import org.junit.runner.RunWith
