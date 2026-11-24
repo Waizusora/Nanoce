@@ -132,7 +132,9 @@ jobs:
             gradle :app:connectedDebugAndroidTest -PnanoceAbi=x86_64 "-Pandroid.testInstrumentationRunnerArguments.class=com.waizusora.nanoce.ProcessDeathSeedTest"
             adb -s emulator-5554 devices -l
             adb -s emulator-5554 shell getprop sys.boot_completed
-            adb -s emulator-5554 shell pm list packages | grep -F "package:com.waizusora.nanoce.debug"
+            adb -s emulator-5554 shell pm list packages -3
+            adb -s emulator-5554 shell pm list packages | grep -i nanoce || true
+            gradle :app:installDebug -PnanoceAbi=x86_64
             adb -s emulator-5554 shell pm path com.waizusora.nanoce.debug
             adb -s emulator-5554 shell am force-stop com.waizusora.nanoce.debug
             adb -s emulator-5554 shell run-as com.waizusora.nanoce.debug ls -l files/nanoce-editor-session.bin
