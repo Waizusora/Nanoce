@@ -132,4 +132,3 @@ jobs:
             gradle :app:connectedDebugAndroidTest -PnanoceAbi=x86_64 "-Pandroid.testInstrumentationRunnerArguments.class=com.waizusora.nanoce.ProcessDeathSeedTest"
             APP_ID="$(adb shell pm list packages | sed 's/^package://' | grep '^com.waizusora.nanoce' | grep -v 'test$' | head -n 1)"; echo "Process-death target package: $APP_ID"; test -n "$APP_ID"; adb shell am force-stop "$APP_ID"; adb shell run-as "$APP_ID" test -s files/nanoce-editor-session.bin; test -z "$(adb shell pidof "$APP_ID")" || { echo "Process remained alive after force-stop" >&2; exit 1; }
             gradle :app:connectedDebugAndroidTest -PnanoceAbi=x86_64 "-Pandroid.testInstrumentationRunnerArguments.class=com.waizusora.nanoce.ProcessDeathRecoveryTest"
-            gradle :app:connectedDebugAndroidTest -PnanoceAbi=x86_64 "-Pandroid.testInstrumentationRunnerArguments.class=com.waizusora.nanoce.ProcessDeathRecoveryTest"
