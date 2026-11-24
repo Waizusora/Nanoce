@@ -7,6 +7,7 @@ import android.util.AtomicFile
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -32,6 +33,10 @@ class ProcessDeathSeedTest {
         try {
             output.write(SessionSnapshotCodec.encode(processDeathSnapshot()))
             snapshotFile.finishWrite(output)
+            val persisted = snapshotFile.openRead().use { input ->
+                SessionSnapshotCodec.decode(input.readBytes())
+            }
+            assertEquals(processDeathSnapshot(), persisted)
         } catch (error: Exception) {
             snapshotFile.failWrite(output)
             throw error
